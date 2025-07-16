@@ -1,0 +1,15 @@
+[package]
+name = "cloud-cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "cloud-cli"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+chrono = "0.4"
+dialoguer = "0.11"
+console = "0.15"
+wait-timeout = "0.2.1"
