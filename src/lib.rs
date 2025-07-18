@@ -1,4 +1,5 @@
 pub mod config;
+pub mod config_loader;
 pub mod error;
 pub mod executor;
 pub mod process;
@@ -14,12 +15,17 @@ use ui::*;
 /// Main CLI application runner
 pub fn run_cli(config: Config) -> Result<()> {
     let registry = ToolRegistry::new();
+    // Create a mutable configuration that can be updated
+    let mut current_config = config;
+
     loop {
         match show_main_menu()? {
             MainMenuAction::Fe => {
-                if let Err(e) = handle_service_loop(&config, "FE", registry.fe_tools(), |pm| {
-                    pm.detect_fe_processes()
-                }) {
+                if let Err(e) =
+                    handle_service_loop(&current_config, "FE", registry.fe_tools(), |pm| {
+                        pm.detect_fe_processes()
+                    })
+                {
                     print_error(&format!("FE service error: {e}"));
                     if !ask_continue("Would you like to return to the main menu?")? {
                         break;
@@ -27,9 +33,11 @@ pub fn run_cli(config: Config) -> Result<()> {
                 }
             }
             MainMenuAction::Be => {
-                if let Err(e) = handle_service_loop(&config, "BE", registry.be_tools(), |pm| {
-                    pm.detect_be_processes()
-                }) {
+                if let Err(e) =
+                    handle_service_loop(&current_config, "BE", registry.be_tools(), |pm| {
+                        pm.detect_be_processes()
+                    })
+                {
                     print_error(&format!("BE service error: {e}"));
                     if !ask_continue("Would you like to return to the main menu?")? {
                         break;
@@ -38,6 +46,10 @@ pub fn run_cli(config: Config) -> Result<()> {
             }
             MainMenuAction::Exit => break,
         }
+
+        // Reload configuration from file after each operation
+        // This ensures we're using the most up-to-date configuration
+        current_config = Config::new();
     }
 
     ui::print_goodbye();
@@ -52,6 +64,7 @@ fn handle_service_loop(
     process_detector: impl Fn(&ProcessManager) -> Result<Vec<process::Process>>,
 ) -> Result<()> {
     let process_manager = ProcessManager;
+
     loop {
         match show_tool_selection_menu(2, &format!("Select {service_name} tool"), tools)? {
             Some(tool) => {
@@ -117,7 +130,22 @@ fn execute_tool(
             Ok(())
         }
         Err(error::CliError::GracefulExit) => Ok(()), // Simply return to the menu
-        Err(e) => handle_tool_execution_error(config, &e).map(|_| ()),
+        Err(e) => {
+            // Handle the error and get the potentially updated config
+            match handle_tool_execution_error(config, &e)? {
+                Some(updated_config) => {
+                    // Try executing the tool again with the updated config
+                    execute_tool(
+                        &updated_config,
+                        tool,
+                        process_manager,
+                        process_detector,
+                        service_name,
+                    )
+                }
+                None => Ok(()),
+            }
+        }
     }
 }
 
@@ -171,6 +199,12 @@ fn handle_tool_execution_error(config: &Config, error: &error::CliError) -> Resu
             }
 
             let fixed_config = config.clone().with_jdk_path(new_path);
+
+            // Persist the updated configuration
+            if let Err(e) = persist_updated_config(&fixed_config) {
+                print_warning(&format!("Failed to persist configuration: {e}"));
+            }
+
             print_success("JDK path updated successfully!");
             Ok(Some(fixed_config))
         }
@@ -194,6 +228,12 @@ fn handle_tool_execution_error(config: &Config, error: &error::CliError) -> Resu
             }
 
             let fixed_config = config.clone().with_output_dir(new_path);
+
+            // Persist the updated configuration
+            if let Err(e) = persist_updated_config(&fixed_config) {
+                print_warning(&format!("Failed to persist configuration: {e}"));
+            }
+
             print_success("Output directory updated successfully!");
             Ok(Some(fixed_config))
         }
@@ -202,4 +242,16 @@ fn handle_tool_execution_error(config: &Config, error: &error::CliError) -> Resu
             "Invalid selection".to_string(),
         )),
     }
+}
+
+/// Helper function to persist updated configuration
+fn persist_updated_config(config: &Config) -> Result<()> {
+    // Try to load the existing configuration or create a default one
+    let doris_config = config_loader::get_current_config()
+        .unwrap_or_else(|_| config_loader::DorisConfig::default())
+        // Update with values from app config
+        .with_app_config(config);
+
+    // Persist the updated configuration
+    config_loader::config_persister::persist_config(&doris_config)
 }
