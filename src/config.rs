@@ -1,3 +1,4 @@
+use crate::config_loader;
 use crate::error::{CliError, Result};
 use std::env;
 use std::path::PathBuf;
@@ -29,9 +30,21 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Creates a new configuration instance from environment variables
+    /// Creates a new configuration instance from dynamic config loader
+    /// or falls back to environment variables if that fails
     pub fn new() -> Self {
-        let mut config = Self::default();
+        // Try to load configuration dynamically, fall back to default if it fails
+        let mut config = config_loader::load_config()
+            .map(config_loader::to_app_config)
+            .unwrap_or_else(|e| {
+                eprintln!(
+                    "\x1b[31m Warning: Failed to load dynamic configuration: {}. Using default configuration.\x1b[0m",
+                    e
+                );
+                Self::default()
+            });
+
+        // Allow environment variables to override config
         config.load_from_env();
         config
     }

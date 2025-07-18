@@ -21,7 +21,7 @@ impl Tool for PstackTool {
     fn execute(&self, config: &Config, pid: u32) -> Result<ExecutionResult> {
         config.ensure_output_dir()?;
 
-        let script_path = PathBuf::from("/opt/selectdb/ps.sh");
+        let script_path = config.output_dir.join("ps.sh");
         self.ensure_pstack_script(&script_path)?;
 
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
@@ -32,7 +32,7 @@ impl Tool for PstackTool {
         command
             .arg(&script_path)
             .arg(pid.to_string())
-            .current_dir("/opt/selectdb");
+            .current_dir(&config.output_dir);
 
         let output = executor::execute_command(&mut command, self.name())?;
 
