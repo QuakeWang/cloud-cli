@@ -48,7 +48,7 @@ fn check_be_process() -> Result<bool> {
 
 /// Check if FE process exists
 fn check_fe_process() -> Result<bool> {
-    let output = execute_command("pgrep -f \"fe.*java\"")?;
+    let output = execute_command("pgrep -f \"(fe.*java|DorisFE)\"")?;
     Ok(!output.is_empty())
 }
 
@@ -113,7 +113,7 @@ pub fn get_be_config_path() -> Result<PathBuf> {
 
 /// Get FE paths including installation path and JDK path
 pub fn get_fe_paths() -> Result<(PathBuf, PathBuf)> {
-    let pid = get_pid("fe.*java")?;
+    let pid = get_pid("(fe.*java|DorisFE)")?;
 
     // Get environment variables related to FE
     let environ = read_proc_environ(&pid, "DORIS|FE|HOME|JAVA_HOME")?;
