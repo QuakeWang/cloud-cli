@@ -20,7 +20,7 @@ pub fn parse_be_config() -> Result<DorisConfig> {
     process_detector::verify_config_file(&be_conf_path)?;
 
     let content = fs::read_to_string(&be_conf_path)
-        .map_err(|e| CliError::ConfigError(format!("Failed to read BE config file: {}", e)))?;
+        .map_err(|e| CliError::ConfigError(format!("Failed to read BE config file: {e}")))?;
 
     let install_dir_clone = install_dir.clone();
 
@@ -45,7 +45,7 @@ pub fn parse_fe_config() -> Result<DorisConfig> {
     process_detector::verify_config_file(&fe_conf_path)?;
 
     let content = fs::read_to_string(&fe_conf_path)
-        .map_err(|e| CliError::ConfigError(format!("Failed to read FE config file: {}", e)))?;
+        .map_err(|e| CliError::ConfigError(format!("Failed to read FE config file: {e}")))?;
 
     let mut config = DorisConfig {
         install_dir,

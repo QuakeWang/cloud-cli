@@ -194,16 +194,13 @@ pub fn persist_config(config: &DorisConfig) -> Result<()> {
     // Convert to persistent format
     let persistent_config = to_persistent_config(config);
     let toml_str = toml::to_string_pretty(&persistent_config)
-        .map_err(|e| CliError::ConfigError(format!("Failed to serialize config: {}", e)))?;
+        .map_err(|e| CliError::ConfigError(format!("Failed to serialize config: {e}")))?;
 
     // Try each path in order until one succeeds
     for config_path in config_paths {
         // Ensure parent directory exists
         if let Err(e) = ensure_dir_exists(&config_path) {
-            eprintln!(
-                "\x1b[33m Notice: Failed to create directory for config: {}\x1b[0m",
-                e
-            );
+            eprintln!("\x1b[33m Notice: Failed to create directory for config: {e}\x1b[0m");
             continue;
         }
 

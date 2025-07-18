@@ -105,7 +105,7 @@ pub fn load_config() -> Result<DorisConfig> {
     let env = match process_detector::detect_environment() {
         Ok(env) => env,
         Err(e) => {
-            eprintln!("\x1b[31m Warning: {}\x1b[0m", e);
+            eprintln!("\x1b[31m Warning: {e}\x1b[0m");
             return Ok(DorisConfig::default());
         }
     };
@@ -134,8 +134,7 @@ fn parse_be_config_with_fallback() -> DorisConfig {
         Ok(config) => config,
         Err(e) => {
             eprintln!(
-                "\x1b[31m Warning: Failed to parse BE configuration: {}. Using default configuration.\x1b[0m",
-                e
+                "\x1b[31m Warning: Failed to parse BE configuration: {e}. Using default configuration.\x1b[0m"
             );
             DorisConfig::default()
         }
@@ -148,8 +147,7 @@ fn parse_fe_config_with_fallback() -> DorisConfig {
         Ok(config) => config,
         Err(e) => {
             eprintln!(
-                "\x1b[31m Warning: Failed to parse FE configuration: {}. Using default configuration.\x1b[0m",
-                e
+                "\x1b[31m Warning: Failed to parse FE configuration: {e}. Using default configuration.\x1b[0m"
             );
             DorisConfig::default()
         }

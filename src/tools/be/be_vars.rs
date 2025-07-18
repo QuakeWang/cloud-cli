@@ -106,8 +106,7 @@ fn query_be_vars(pattern: &str) -> Result<String> {
         .join(", ");
 
     Err(CliError::ToolExecutionFailed(format!(
-        "Could not connect to any BE http port ({}). Check if BE is running.",
-        ports_str
+        "Could not connect to any BE http port ({ports_str}). Check if BE is running."
     )))
 }
 

@@ -31,11 +31,11 @@ fn execute_command_internal(cmd: &str) -> Result<String> {
         .arg("-c")
         .arg(cmd)
         .output()
-        .map_err(|e| CliError::ConfigError(format!("Failed to execute command: {}", e)))?;
+        .map_err(|e| CliError::ConfigError(format!("Failed to execute command: {e}")))?;
 
     let result = str::from_utf8(&output.stdout)
         .map(|s| s.trim().to_string())
-        .map_err(|e| CliError::ConfigError(format!("Failed to parse command output: {}", e)))?;
+        .map_err(|e| CliError::ConfigError(format!("Failed to parse command output: {e}")))?;
 
     Ok(result)
 }
@@ -54,12 +54,12 @@ fn check_fe_process() -> Result<bool> {
 
 /// Get process ID of the first matching process
 fn get_pid(pattern: &str) -> Result<String> {
-    let output = execute_command(&format!("pgrep -f \"{}\"", pattern))?;
+    let output = execute_command(&format!("pgrep -f \"{pattern}\""))?;
 
     let pid = output
         .lines()
         .next()
-        .ok_or_else(|| CliError::ConfigError(format!("No PID found for pattern: {}", pattern)))?
+        .ok_or_else(|| CliError::ConfigError(format!("No PID found for pattern: {pattern}")))?
         .trim()
         .to_string();
 
@@ -68,10 +68,7 @@ fn get_pid(pattern: &str) -> Result<String> {
 
 /// Read environment variables from /proc/$pid/environ
 fn read_proc_environ(pid: &str, grep_pattern: &str) -> Result<String> {
-    let cmd = format!(
-        "cat /proc/{}/environ | tr '\\0' '\\n' | grep -E '{}'",
-        pid, grep_pattern
-    );
+    let cmd = format!("cat /proc/{pid}/environ | tr '\\0' '\\n' | grep -E '{grep_pattern}'");
     execute_command(&cmd)
 }
 
@@ -83,7 +80,7 @@ pub fn extract_env_var(environ_output: &str, key: &str) -> Option<String> {
 fn extract_env_var_internal(environ_output: &str, key: &str) -> Option<String> {
     environ_output
         .lines()
-        .find(|line| line.starts_with(&format!("{}=", key)))
+        .find(|line| line.starts_with(&format!("{key}=")))
         .map(|line| line[key.len() + 1..].to_string())
 }
 

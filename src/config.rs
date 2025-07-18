@@ -38,8 +38,7 @@ impl Config {
             .map(config_loader::to_app_config)
             .unwrap_or_else(|e| {
                 eprintln!(
-                    "\x1b[31m Warning: Failed to load dynamic configuration: {}. Using default configuration.\x1b[0m",
-                    e
+                    "\x1b[31m Warning: Failed to load dynamic configuration: {e}. Using default configuration.\x1b[0m"
                 );
                 Self::default()
             });

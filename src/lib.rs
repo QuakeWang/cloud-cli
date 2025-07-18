@@ -202,7 +202,7 @@ fn handle_tool_execution_error(config: &Config, error: &error::CliError) -> Resu
 
             // Persist the updated configuration
             if let Err(e) = persist_updated_config(&fixed_config) {
-                print_warning(&format!("Failed to persist configuration: {}", e));
+                print_warning(&format!("Failed to persist configuration: {e}"));
             }
 
             print_success("JDK path updated successfully!");
@@ -231,7 +231,7 @@ fn handle_tool_execution_error(config: &Config, error: &error::CliError) -> Resu
 
             // Persist the updated configuration
             if let Err(e) = persist_updated_config(&fixed_config) {
-                print_warning(&format!("Failed to persist configuration: {}", e));
+                print_warning(&format!("Failed to persist configuration: {e}"));
             }
 
             print_success("Output directory updated successfully!");
