@@ -225,9 +225,7 @@ fn read_proc_environ_by_pid(pid: u32, grep_pattern: &str) -> Result<String> {
 
     if proc_path.exists() {
         // Linux system
-        let cmd = format!(
-            "cat /proc/{pid}/environ | tr '\\0' '\\n' | grep -E '{grep_pattern}'"
-        );
+        let cmd = format!("cat /proc/{pid}/environ | tr '\\0' '\\n' | grep -E '{grep_pattern}'");
         execute_command(&cmd)
     } else {
         // If /proc doesn't exist or we can't access it
@@ -251,9 +249,7 @@ pub fn get_paths(env: Environment) -> Result<(PathBuf, PathBuf)> {
 
     // Extract DORIS_HOME and JAVA_HOME
     let doris_home = extract_env_var(&environ, "DORIS_HOME").ok_or_else(|| {
-        CliError::ConfigError(format!(
-            "DORIS_HOME not found in {env} process environment"
-        ))
+        CliError::ConfigError(format!("DORIS_HOME not found in {env} process environment"))
     })?;
 
     let java_home =
