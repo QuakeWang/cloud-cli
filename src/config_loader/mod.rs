@@ -244,7 +244,7 @@ fn update_mixed_deployment(config: &mut DorisConfig) -> Result<()> {
 
 fn persist_configuration(config: &DorisConfig) {
     if let Err(e) = config_persister::persist_config(config) {
-        eprintln!("Warning: Failed to persist configuration: {}", e);
+        eprintln!("Warning: Failed to persist configuration: {e}");
     }
 }
 
@@ -425,8 +425,7 @@ pub fn get_config_path_mixed(env: Environment) -> Result<PathBuf> {
     }
 
     Err(CliError::ConfigError(format!(
-        "No {} installation found in mixed deployment",
-        env
+        "No {env} installation found in mixed deployment"
     )))
 }
 

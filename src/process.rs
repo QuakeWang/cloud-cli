@@ -146,8 +146,7 @@ impl ProcessTool {
 
         if !output.status.success() {
             return Err(CliError::ProcessExecutionFailed(format!(
-                "Failed to get info for PID {}",
-                pid
+                "Failed to get info for PID {pid}"
             )));
         }
 

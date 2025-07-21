@@ -489,11 +489,11 @@ fn migrate_legacy_config(content: &str, config_path: &Path) -> Option<DorisConfi
             match toml::to_string_pretty(&new_config) {
                 Ok(new_content) => {
                     if let Err(e) = fs::write(config_path, new_content) {
-                        eprintln!("Warning: Failed to save migrated config: {}", e);
+                        eprintln!("Warning: Failed to save migrated config: {e}");
                     }
                 }
                 Err(e) => {
-                    eprintln!("Warning: Failed to serialize migrated config: {}", e);
+                    eprintln!("Warning: Failed to serialize migrated config: {e}");
                 }
             }
 
@@ -544,7 +544,7 @@ pub fn load_persisted_config() -> Result<DorisConfig> {
 
     match last_error {
         Some(e) => {
-            eprintln!("Warning: {}", e);
+            eprintln!("Warning: {e}");
             Ok(DorisConfig::default())
         }
         None => Ok(DorisConfig::default()),
