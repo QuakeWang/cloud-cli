@@ -46,7 +46,9 @@ fn show_interactive_menu(step: u8, title: &str, items: &[String]) -> Result<usiz
 
     for (i, item) in items.iter().enumerate() {
         let line = if i == selection {
-            format!("{} {}", style(">").cyan().bold(), style(item).cyan())
+            let arrow = style(">").cyan().bold();
+            let styled_item = style(item).cyan();
+            format!("{arrow} {styled_item}")
         } else {
             format!("  {item}")
         };
@@ -92,7 +94,9 @@ fn show_interactive_menu(step: u8, title: &str, items: &[String]) -> Result<usiz
         for (i, item) in items.iter().enumerate() {
             term.clear_line()?;
             let line = if i == selection {
-                format!("{} {}", style(">").cyan().bold(), style(item).cyan())
+                let arrow = style(">").cyan().bold();
+                let styled_item = style(item).cyan();
+                format!("{arrow} {styled_item}")
             } else {
                 format!("  {item}")
             };

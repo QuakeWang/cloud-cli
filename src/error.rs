@@ -46,4 +46,16 @@ impl From<dialoguer::Error> for CliError {
     }
 }
 
+impl From<toml::ser::Error> for CliError {
+    fn from(err: toml::ser::Error) -> Self {
+        CliError::ConfigError(format!("Failed to serialize config: {err}"))
+    }
+}
+
+impl From<toml::de::Error> for CliError {
+    fn from(err: toml::de::Error) -> Self {
+        CliError::ConfigError(format!("Failed to parse config: {err}"))
+    }
+}
+
 pub type Result<T> = std::result::Result<T, CliError>;

@@ -8,7 +8,6 @@ pub mod ui;
 
 use config::Config;
 use error::Result;
-use process::ProcessManager;
 use tools::{Tool, ToolRegistry};
 use ui::*;
 
@@ -21,11 +20,7 @@ pub fn run_cli(config: Config) -> Result<()> {
     loop {
         match show_main_menu()? {
             MainMenuAction::Fe => {
-                if let Err(e) =
-                    handle_service_loop(&current_config, "FE", registry.fe_tools(), |pm| {
-                        pm.detect_fe_processes()
-                    })
-                {
+                if let Err(e) = handle_service_loop(&current_config, "FE", registry.fe_tools()) {
                     print_error(&format!("FE service error: {e}"));
                     if !ask_continue("Would you like to return to the main menu?")? {
                         break;
@@ -33,11 +28,7 @@ pub fn run_cli(config: Config) -> Result<()> {
                 }
             }
             MainMenuAction::Be => {
-                if let Err(e) =
-                    handle_service_loop(&current_config, "BE", registry.be_tools(), |pm| {
-                        pm.detect_be_processes()
-                    })
-                {
+                if let Err(e) = handle_service_loop(&current_config, "BE", registry.be_tools()) {
                     print_error(&format!("BE service error: {e}"));
                     if !ask_continue("Would you like to return to the main menu?")? {
                         break;
@@ -47,8 +38,6 @@ pub fn run_cli(config: Config) -> Result<()> {
             MainMenuAction::Exit => break,
         }
 
-        // Reload configuration from file after each operation
-        // This ensures we're using the most up-to-date configuration
         current_config = Config::new();
     }
 
@@ -57,31 +46,17 @@ pub fn run_cli(config: Config) -> Result<()> {
 }
 
 /// Generic loop for handling a service type (FE or BE).
-fn handle_service_loop(
-    config: &Config,
-    service_name: &str,
-    tools: &[Box<dyn Tool>],
-    process_detector: impl Fn(&ProcessManager) -> Result<Vec<process::Process>>,
-) -> Result<()> {
-    let process_manager = ProcessManager;
-
+fn handle_service_loop(config: &Config, service_name: &str, tools: &[Box<dyn Tool>]) -> Result<()> {
     loop {
         match show_tool_selection_menu(2, &format!("Select {service_name} tool"), tools)? {
             Some(tool) => {
-                if let Err(e) = execute_tool(
-                    config,
-                    tool,
-                    &process_manager,
-                    &process_detector,
-                    service_name,
-                ) {
+                if let Err(e) = execute_tool_enhanced(config, tool, service_name) {
                     match e {
                         error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
                         _ => print_error(&format!("Tool execution failed: {e}")),
                     }
                 }
 
-                // After a tool runs (or gracefully exits), show the post-execution menu
                 match show_post_execution_menu(tool.name())? {
                     PostExecutionAction::Continue => continue,
                     PostExecutionAction::BackToMain => return Ok(()),
@@ -96,22 +71,24 @@ fn handle_service_loop(
     }
 }
 
-/// Generic tool execution function.
-fn execute_tool(
-    config: &Config,
-    tool: &dyn Tool,
-    process_manager: &ProcessManager,
-    process_detector: &impl Fn(&ProcessManager) -> Result<Vec<process::Process>>,
-    service_name: &str,
-) -> Result<()> {
+/// Enhanced tool execution function that uses the new configuration system
+fn execute_tool_enhanced(config: &Config, tool: &dyn Tool, _service_name: &str) -> Result<()> {
     let pid = if tool.requires_pid() {
-        let processes = process_detector(process_manager)?;
-        if processes.is_empty() {
-            print_error(&format!("No {} processes found.", tool.name()));
-            return Ok(());
+        // Try to get PID from configuration first
+        match config_loader::get_current_pid() {
+            Some(pid) => pid,
+            None => {
+                // Fallback: try to detect and select process interactively
+                match process::select_process_interactively() {
+                    Ok(pid) => pid,
+                    Err(_) => {
+                        let tool_name = tool.name();
+                        print_error(&format!("No {tool_name} processes found."));
+                        return Ok(());
+                    }
+                }
+            }
         }
-        let selected_process = process_manager.select_process(&processes, service_name)?;
-        selected_process.pid
     } else {
         0 // PID is not required, provide a dummy value
     };
@@ -135,13 +112,7 @@ fn execute_tool(
             match handle_tool_execution_error(config, &e)? {
                 Some(updated_config) => {
                     // Try executing the tool again with the updated config
-                    execute_tool(
-                        &updated_config,
-                        tool,
-                        process_manager,
-                        process_detector,
-                        service_name,
-                    )
+                    execute_tool_enhanced(&updated_config, tool, _service_name)
                 }
                 None => Ok(()),
             }
@@ -186,7 +157,8 @@ fn handle_tool_execution_error(config: &Config, error: &error::CliError) -> Resu
 
             // Validate the new path
             if !new_path.exists() {
-                print_error(&format!("Path does not exist: {}", new_path.display()));
+                let path_display = new_path.display();
+                print_error(&format!("Path does not exist: {path_display}"));
                 return Ok(None);
             }
 
@@ -244,14 +216,12 @@ fn handle_tool_execution_error(config: &Config, error: &error::CliError) -> Resu
     }
 }
 
-/// Helper function to persist updated configuration
+/// Persist updated configuration to disk
 fn persist_updated_config(config: &Config) -> Result<()> {
-    // Try to load the existing configuration or create a default one
-    let doris_config = config_loader::get_current_config()
-        .unwrap_or_else(|_| config_loader::DorisConfig::default())
-        // Update with values from app config
-        .with_app_config(config);
-
-    // Persist the updated configuration
-    config_loader::config_persister::persist_config(&doris_config)
+    let mut doris_config = config_loader::get_current_config()?;
+    doris_config = doris_config.with_app_config(config);
+    match config_loader::config_persister::persist_config(&doris_config) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(e),
+    }
 }
