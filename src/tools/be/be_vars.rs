@@ -1,15 +1,12 @@
 use crate::config::Config;
-use crate::config_loader;
 use crate::error::{CliError, Result};
-use crate::executor;
+use crate::tools::common::be_webserver;
 use crate::tools::{ExecutionResult, Tool};
 use crate::ui;
 use dialoguer::{Input, theme::ColorfulTheme};
 use std::path::PathBuf;
-use std::process::Command;
 
-const BE_DEFAULT_IP: &str = "127.0.0.1";
-
+/// Tool to query BE configuration variables
 pub struct BeVarsTool;
 
 impl Tool for BeVarsTool {
@@ -31,8 +28,8 @@ impl Tool for BeVarsTool {
             "Querying BE for variables matching: '{variable_name}'"
         ));
 
-        let query_result = query_be_vars(&variable_name);
-        handle_query_result(&variable_name, query_result);
+        let result = be_webserver::request_be_webserver_port("/varz", Some(&variable_name));
+        handle_query_result(&variable_name, result);
 
         Ok(ExecutionResult {
             output_path: PathBuf::from("console_output"),
@@ -75,51 +72,6 @@ fn handle_query_result(variable_name: &str, result: Result<String>) {
         Err(e) => {
             ui::print_error(&format!("Failed to query BE: {e}."));
             ui::print_info("Tips: Ensure the BE service is running and accessible.");
-        }
-    }
-}
-
-/// Queries the BE's /varz endpoint for a given pattern.
-fn query_be_vars(pattern: &str) -> Result<String> {
-    // Get BE HTTP ports from configuration
-    let be_http_ports = get_be_http_ports()?;
-
-    for &port in &be_http_ports {
-        let url = format!("http://{BE_DEFAULT_IP}:{port}/varz");
-        let mut curl_cmd = Command::new("curl");
-        curl_cmd.args(["-sS", &url]);
-
-        if let Ok(output) = executor::execute_command(&mut curl_cmd, "curl") {
-            let varz_content = String::from_utf8_lossy(&output.stdout);
-            let filtered_lines: Vec<&str> = varz_content
-                .lines()
-                .filter(|line| line.contains(pattern))
-                .collect();
-            return Ok(filtered_lines.join("\n"));
-        }
-    }
-
-    let ports_str = be_http_ports
-        .iter()
-        .map(|p| p.to_string())
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    Err(CliError::ToolExecutionFailed(format!(
-        "Could not connect to any BE http port ({ports_str}). Check if BE is running."
-    )))
-}
-
-/// Get BE HTTP ports from configuration or use defaults
-fn get_be_http_ports() -> Result<Vec<u16>> {
-    match config_loader::get_current_config() {
-        Ok(doris_config) => Ok(doris_config.get_be_http_ports()),
-        Err(_) => {
-            // Fallback to default ports if configuration cannot be loaded
-            ui::print_warning(
-                "Could not load configuration, using default BE HTTP ports (8040, 8041)",
-            );
-            Ok(vec![8040, 8041])
         }
     }
 }
