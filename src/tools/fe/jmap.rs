@@ -25,7 +25,8 @@ impl Tool for JmapDumpTool {
         let output_path = config.output_dir.join(filename);
 
         let jmap_path = config.get_jmap_path();
-        let dump_arg = format!("live,file={}", output_path.display());
+        let file_path = output_path.display();
+        let dump_arg = format!("live,file={file_path}");
 
         let mut command = Command::new(&jmap_path);
         command.args([format!("-dump:{dump_arg}"), pid.to_string()]);
