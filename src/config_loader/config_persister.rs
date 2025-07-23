@@ -10,12 +10,13 @@ trait ConfigConverter<T> {
     fn convert_to(&self) -> T;
 }
 
-/// Serializable configuration structure
+/// Serializable configuration structure with organized FE and BE sections
 #[derive(Serialize, Deserialize)]
-struct PersistentConfig {
+struct OrganizedConfig {
     metadata: Metadata,
-    paths: Paths,
-    ports: Ports,
+    paths: CommonPaths,
+    fe: Option<FeConfig>,
+    be: Option<BeConfig>,
     network: Network,
     settings: Settings,
     process: ProcessInfo,
@@ -75,6 +76,50 @@ struct ProcessInfo {
     fe_install_dir: Option<String>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct CommonPaths {
+    jdk_path: String,
+    output_dir: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct FeConfig {
+    install_dir: String,
+    conf_dir: String,
+    log_dir: String,
+    meta_dir: Option<String>,
+    ports: FePorts,
+    process_pid: Option<u32>,
+    process_command: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct BeConfig {
+    install_dir: String,
+    conf_dir: String,
+    log_dir: String,
+    ports: BePorts,
+    process_pid: Option<u32>,
+    process_command: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct FePorts {
+    http_port: Option<u16>,
+    rpc_port: Option<u16>,
+    query_port: Option<u16>,
+    edit_log_port: Option<u16>,
+    cloud_http_port: Option<u16>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct BePorts {
+    be_port: Option<u16>,
+    brpc_port: Option<u16>,
+    heartbeat_service_port: Option<u16>,
+    webserver_port: Option<u16>,
+}
+
 fn path_to_string(path: &Path) -> String {
     path.to_string_lossy().to_string()
 }
@@ -84,6 +129,7 @@ impl ConfigConverter<Metadata> for DorisConfig {
         let env_str = match self.environment {
             Environment::FE => "FE",
             Environment::BE => "BE",
+            Environment::Mixed => "FE + BE",
             Environment::Unknown => "Unknown",
         };
 
@@ -175,6 +221,7 @@ impl ConfigConverter<DorisConfig> for PersistentConfig {
         let environment = match self.metadata.environment.as_str() {
             "FE" => Environment::FE,
             "BE" => Environment::BE,
+            "FE + BE" => Environment::Mixed,
             _ => Environment::Unknown,
         };
 
@@ -222,6 +269,7 @@ fn from_persistent_config(persistent: PersistentConfig) -> DorisConfig {
     let environment = match persistent.metadata.environment.as_str() {
         "FE" => Environment::FE,
         "BE" => Environment::BE,
+        "FE + BE" => Environment::Mixed,
         _ => Environment::Unknown,
     };
 
@@ -294,69 +342,6 @@ fn get_config_file_paths() -> Result<Vec<PathBuf>> {
     Ok(paths)
 }
 
-/// Convert internal config to persistent format
-fn to_persistent_config(config: &DorisConfig) -> PersistentConfig {
-    let env_str = match config.environment {
-        Environment::FE => "FE",
-        Environment::BE => "BE",
-        Environment::Unknown => "Unknown",
-    };
-
-    PersistentConfig {
-        metadata: Metadata {
-            environment: env_str.to_string(),
-            version: env!("CARGO_PKG_VERSION").to_string(),
-        },
-        paths: Paths {
-            install_dir: config.install_dir.to_string_lossy().to_string(),
-            conf_dir: config.conf_dir.to_string_lossy().to_string(),
-            log_dir: config.log_dir.to_string_lossy().to_string(),
-            jdk_path: config.jdk_path.to_string_lossy().to_string(),
-            output_dir: config.output_dir.to_string_lossy().to_string(),
-            meta_dir: config
-                .meta_dir
-                .as_ref()
-                .map(|p| p.to_string_lossy().to_string()),
-        },
-        ports: Ports {
-            be_port: config.be_port,
-            brpc_port: config.brpc_port,
-            heartbeat_service_port: config.heartbeat_service_port,
-            webserver_port: config.webserver_port,
-            http_port: config.http_port,
-            rpc_port: config.rpc_port,
-            query_port: config.query_port,
-            edit_log_port: config.edit_log_port,
-            cloud_http_port: config.cloud_http_port,
-        },
-        network: Network {
-            priority_networks: config.priority_networks.clone(),
-            meta_service_endpoint: config.meta_service_endpoint.clone(),
-        },
-        settings: Settings {
-            timeout_seconds: config.timeout_seconds,
-            no_progress_animation: config.no_progress_animation,
-        },
-        process: ProcessInfo {
-            pid: config.process_pid,
-            command: config.process_command.clone(),
-            last_detected: config.last_detected.map(|dt| dt.to_rfc3339()),
-            be_process_pid: config.be_process_pid,
-            be_process_command: config.be_process_command.clone(),
-            be_install_dir: config
-                .be_install_dir
-                .as_ref()
-                .map(|p| p.to_string_lossy().to_string()),
-            fe_process_pid: config.fe_process_pid,
-            fe_process_command: config.fe_process_command.clone(),
-            fe_install_dir: config
-                .fe_install_dir
-                .as_ref()
-                .map(|p| p.to_string_lossy().to_string()),
-        },
-    }
-}
-
 /// Try to create directory if it doesn't exist
 fn ensure_dir_exists(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
@@ -408,8 +393,8 @@ impl PersistResult {
 /// Persist configuration to file
 pub fn persist_config(config: &DorisConfig) -> Result<PersistResult> {
     let config_paths = get_config_file_paths()?;
-    let persistent_config = to_persistent_config(config);
-    let toml_str = toml::to_string_pretty(&persistent_config)?;
+    let organized_config = to_organized_config(config);
+    let toml_str = toml::to_string_pretty(&organized_config)?;
 
     let mut errors = Vec::new();
 
@@ -514,24 +499,32 @@ pub fn load_persisted_config() -> Result<DorisConfig> {
         }
 
         match fs::read_to_string(&config_path) {
-            Ok(content) => match toml::from_str::<PersistentConfig>(&content) {
-                Ok(persistent_config) => {
-                    return Ok(from_persistent_config(persistent_config));
+            Ok(content) => {
+                // First try to parse as OrganizedConfig
+                if let Ok(organized_config) = toml::from_str::<OrganizedConfig>(&content) {
+                    return Ok(from_organized_config(&organized_config));
                 }
-                Err(e) => {
-                    if e.to_string().contains("missing field `process`") {
-                        if let Some(config) = migrate_legacy_config(&content, &config_path) {
-                            return Ok(config);
-                        }
-                    }
 
-                    last_error = Some(CliError::ConfigError(format!(
-                        "Failed to parse config file {}: {}",
-                        config_path.display(),
-                        e
-                    )));
+                // If that fails, try as PersistentConfig
+                match toml::from_str::<PersistentConfig>(&content) {
+                    Ok(persistent_config) => {
+                        return Ok(from_persistent_config(persistent_config));
+                    }
+                    Err(e) => {
+                        if e.to_string().contains("missing field `process`") {
+                            if let Some(config) = migrate_legacy_config(&content, &config_path) {
+                                return Ok(config);
+                            }
+                        }
+
+                        last_error = Some(CliError::ConfigError(format!(
+                            "Failed to parse config file {}: {}",
+                            config_path.display(),
+                            e
+                        )));
+                    }
                 }
-            },
+            }
             Err(e) => {
                 last_error = Some(CliError::ConfigError(format!(
                     "Failed to read config file {}: {}",
@@ -548,5 +541,263 @@ pub fn load_persisted_config() -> Result<DorisConfig> {
             Ok(DorisConfig::default())
         }
         None => Ok(DorisConfig::default()),
+    }
+}
+
+/// Convert organized config to internal config
+fn from_organized_config(organized: &OrganizedConfig) -> DorisConfig {
+    let environment = match organized.metadata.environment.as_str() {
+        "FE" => Environment::FE,
+        "BE" => Environment::BE,
+        "FE + BE" => Environment::Mixed,
+        _ => Environment::Unknown,
+    };
+
+    let mut config = DorisConfig {
+        environment,
+        // Default paths
+        install_dir: PathBuf::new(),
+        conf_dir: PathBuf::new(),
+        log_dir: PathBuf::new(),
+
+        // Common paths
+        jdk_path: PathBuf::from(&organized.paths.jdk_path),
+        output_dir: PathBuf::from(&organized.paths.output_dir),
+
+        // Settings
+        timeout_seconds: organized.settings.timeout_seconds,
+        no_progress_animation: organized.settings.no_progress_animation,
+
+        // Network
+        priority_networks: organized.network.priority_networks.clone(),
+        meta_service_endpoint: organized.network.meta_service_endpoint.clone(),
+
+        // Process info from the common section
+        process_pid: organized.process.pid,
+        process_command: organized.process.command.clone(),
+        last_detected: organized
+            .process
+            .last_detected
+            .as_ref()
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+            .map(|dt| dt.with_timezone(&chrono::Utc)),
+
+        // Initialize all other fields to None/default
+        be_port: None,
+        brpc_port: None,
+        heartbeat_service_port: None,
+        webserver_port: None,
+        http_port: None,
+        rpc_port: None,
+        query_port: None,
+        edit_log_port: None,
+        cloud_http_port: None,
+        meta_dir: None,
+        be_process_pid: None,
+        be_process_command: None,
+        be_install_dir: None,
+        fe_process_pid: None,
+        fe_process_command: None,
+        fe_install_dir: None,
+    };
+
+    // Set BE specific configurations if available
+    if let Some(be) = &organized.be {
+        config.be_port = be.ports.be_port;
+        config.brpc_port = be.ports.brpc_port;
+        config.heartbeat_service_port = be.ports.heartbeat_service_port;
+        config.webserver_port = be.ports.webserver_port;
+
+        if environment == Environment::BE {
+            config.install_dir = PathBuf::from(&be.install_dir);
+            config.conf_dir = PathBuf::from(&be.conf_dir);
+            config.log_dir = PathBuf::from(&be.log_dir);
+        }
+
+        config.be_process_pid = be.process_pid;
+        config.be_process_command = be.process_command.clone();
+        config.be_install_dir = Some(PathBuf::from(&be.install_dir));
+    }
+
+    // Set FE specific configurations if available
+    if let Some(fe) = &organized.fe {
+        config.http_port = fe.ports.http_port;
+        config.rpc_port = fe.ports.rpc_port;
+        config.query_port = fe.ports.query_port;
+        config.edit_log_port = fe.ports.edit_log_port;
+        config.cloud_http_port = fe.ports.cloud_http_port;
+        config.meta_dir = fe.meta_dir.as_ref().map(PathBuf::from);
+
+        if environment == Environment::FE {
+            config.install_dir = PathBuf::from(&fe.install_dir);
+            config.conf_dir = PathBuf::from(&fe.conf_dir);
+            config.log_dir = PathBuf::from(&fe.log_dir);
+        }
+
+        config.fe_process_pid = fe.process_pid;
+        config.fe_process_command = fe.process_command.clone();
+        config.fe_install_dir = Some(PathBuf::from(&fe.install_dir));
+    }
+
+    // For mixed environment, prioritize BE for main install_dir
+    if environment == Environment::Mixed {
+        if let Some(be) = &organized.be {
+            config.install_dir = PathBuf::from(&be.install_dir);
+            config.conf_dir = PathBuf::from(&be.conf_dir);
+            config.log_dir = PathBuf::from(&be.log_dir);
+        } else if let Some(fe) = &organized.fe {
+            config.install_dir = PathBuf::from(&fe.install_dir);
+            config.conf_dir = PathBuf::from(&fe.conf_dir);
+            config.log_dir = PathBuf::from(&fe.log_dir);
+        }
+    }
+
+    config
+}
+
+/// Serializable configuration structure
+#[derive(Serialize, Deserialize)]
+struct PersistentConfig {
+    metadata: Metadata,
+    paths: Paths,
+    ports: Ports,
+    network: Network,
+    settings: Settings,
+    process: ProcessInfo,
+}
+
+/// Convert DorisConfig to the new organized format
+fn to_organized_config(config: &DorisConfig) -> OrganizedConfig {
+    // Common paths
+    let common_paths = CommonPaths {
+        jdk_path: path_to_string(&config.jdk_path),
+        output_dir: path_to_string(&config.output_dir),
+    };
+
+    // FE configuration
+    let fe_config =
+        if config.environment == Environment::FE || config.environment == Environment::Mixed {
+            let fe_install_dir = config
+                .fe_install_dir
+                .as_ref()
+                .unwrap_or(&config.install_dir);
+            Some(FeConfig {
+                install_dir: path_to_string(fe_install_dir),
+                conf_dir: path_to_string(&fe_install_dir.join("conf")),
+                log_dir: path_to_string(&fe_install_dir.join("log")),
+                meta_dir: config.meta_dir.as_ref().map(|p| path_to_string(p)),
+                ports: FePorts {
+                    http_port: config.http_port,
+                    rpc_port: config.rpc_port,
+                    query_port: config.query_port,
+                    edit_log_port: config.edit_log_port,
+                    cloud_http_port: config.cloud_http_port,
+                },
+                process_pid: if config.environment == Environment::FE {
+                    config.process_pid
+                } else {
+                    config.fe_process_pid
+                },
+                process_command: if config.environment == Environment::FE {
+                    config.process_command.clone()
+                } else {
+                    config.fe_process_command.clone()
+                },
+            })
+        } else {
+            None
+        };
+
+    // BE configuration
+    let be_config =
+        if config.environment == Environment::BE || config.environment == Environment::Mixed {
+            let be_install_dir = config
+                .be_install_dir
+                .as_ref()
+                .unwrap_or(&config.install_dir);
+            Some(BeConfig {
+                install_dir: path_to_string(be_install_dir),
+                conf_dir: path_to_string(&be_install_dir.join("conf")),
+                log_dir: path_to_string(&be_install_dir.join("log")),
+                ports: BePorts {
+                    be_port: config.be_port,
+                    brpc_port: config.brpc_port,
+                    heartbeat_service_port: config.heartbeat_service_port,
+                    webserver_port: config.webserver_port,
+                },
+                process_pid: if config.environment == Environment::BE {
+                    config.process_pid
+                } else {
+                    config.be_process_pid
+                },
+                process_command: if config.environment == Environment::BE {
+                    config.process_command.clone()
+                } else {
+                    config.be_process_command.clone()
+                },
+            })
+        } else {
+            None
+        };
+
+    // Create organized config
+    OrganizedConfig {
+        metadata: config.convert_to(),
+        paths: common_paths,
+        fe: fe_config,
+        be: be_config,
+        network: config.convert_to(),
+        settings: config.convert_to(),
+        process: config.convert_to(),
+    }
+}
+
+/// Save configuration in organized format
+pub fn save_organized_config(config: &DorisConfig) -> Result<PersistResult> {
+    let config_paths = get_config_file_paths()?;
+    let organized_config = to_organized_config(config);
+    let toml_str = toml::to_string_pretty(&organized_config)?;
+
+    let mut errors = Vec::new();
+
+    for config_path in &config_paths {
+        if let Err(e) = ensure_dir_exists(config_path) {
+            errors.push((
+                config_path.clone(),
+                format!("Failed to create directory: {e}"),
+            ));
+            continue;
+        }
+
+        if !is_path_writable(config_path.parent().unwrap_or(config_path)) {
+            errors.push((config_path.clone(), "No write permission".to_string()));
+            continue;
+        }
+
+        match fs::File::create(config_path) {
+            Ok(mut file) => match file.write_all(toml_str.as_bytes()) {
+                Ok(_) => {
+                    if errors.is_empty() {
+                        return Ok(PersistResult::Success(config_path.clone()));
+                    } else {
+                        return Ok(PersistResult::PartialSuccess(config_path.clone(), errors));
+                    }
+                }
+                Err(e) => {
+                    errors.push((config_path.clone(), format!("Write error: {e}")));
+                }
+            },
+            Err(e) => {
+                errors.push((config_path.clone(), format!("Create file error: {e}")));
+            }
+        }
+    }
+
+    if !errors.is_empty() {
+        Ok(PersistResult::AllFailed(errors))
+    } else {
+        Err(CliError::ConfigError(
+            "No valid paths to persist config".to_string(),
+        ))
     }
 }

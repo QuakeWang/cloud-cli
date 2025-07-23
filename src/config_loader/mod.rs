@@ -1,4 +1,4 @@
-use crate::error::{CliError, Result};
+use crate::error::Result;
 use std::path::PathBuf;
 
 pub mod config_parser;
@@ -10,6 +10,7 @@ pub mod regex_utils;
 pub enum Environment {
     FE,
     BE,
+    Mixed,
     Unknown,
 }
 
@@ -18,6 +19,7 @@ impl std::fmt::Display for Environment {
         match self {
             Environment::FE => write!(f, "FE"),
             Environment::BE => write!(f, "BE"),
+            Environment::Mixed => write!(f, "FE + BE"),
             Environment::Unknown => write!(f, "Unknown"),
         }
     }
@@ -76,7 +78,7 @@ impl Default for DorisConfig {
             conf_dir: PathBuf::from("/opt/selectdb/conf"),
             log_dir: PathBuf::from("/opt/selectdb/log"),
             jdk_path: PathBuf::from("/opt/jdk"),
-            output_dir: PathBuf::from("/opt/selectdb/information"),
+            output_dir: PathBuf::from("/tmp/doris/collection"),
             timeout_seconds: 60,
             no_progress_animation: false,
             process_pid: None,
@@ -144,86 +146,6 @@ impl DorisConfig {
     }
 }
 
-trait ConfigLoader {
-    fn try_load(&self) -> Result<Option<DorisConfig>>;
-}
-
-struct PersistedConfigLoader;
-
-impl ConfigLoader for PersistedConfigLoader {
-    fn try_load(&self) -> Result<Option<DorisConfig>> {
-        match config_persister::load_persisted_config() {
-            Ok(config) => Ok(Some(config)),
-            Err(_) => Ok(None),
-        }
-    }
-}
-
-struct ProcessDetectionLoader;
-
-impl ConfigLoader for ProcessDetectionLoader {
-    fn try_load(&self) -> Result<Option<DorisConfig>> {
-        match process_detector::detect_current_process() {
-            Ok(process) => {
-                let mut config = DorisConfig::default();
-                config = update_config_from_process(config, process)?;
-                Ok(Some(config))
-            }
-            Err(_) => Ok(None),
-        }
-    }
-}
-
-struct EnvironmentDetectionLoader;
-
-impl ConfigLoader for EnvironmentDetectionLoader {
-    fn try_load(&self) -> Result<Option<DorisConfig>> {
-        match process_detector::detect_environment() {
-            Ok(Environment::Unknown) => Ok(None),
-            Ok(env) => {
-                let mut config = parse_env_specific_config(env);
-                config.environment = env;
-                Ok(Some(config))
-            }
-            Err(_) => Ok(None),
-        }
-    }
-}
-
-struct DefaultConfigLoader;
-
-impl ConfigLoader for DefaultConfigLoader {
-    fn try_load(&self) -> Result<Option<DorisConfig>> {
-        Ok(Some(DorisConfig::default()))
-    }
-}
-
-struct ConfigLoaderChain {
-    loaders: Vec<Box<dyn ConfigLoader>>,
-}
-
-impl ConfigLoaderChain {
-    fn new() -> Self {
-        let mut chain = Self {
-            loaders: Vec::new(),
-        };
-        chain.loaders.push(Box::new(PersistedConfigLoader));
-        chain.loaders.push(Box::new(ProcessDetectionLoader));
-        chain.loaders.push(Box::new(EnvironmentDetectionLoader));
-        chain.loaders.push(Box::new(DefaultConfigLoader));
-        chain
-    }
-
-    fn load(&self) -> Result<DorisConfig> {
-        for loader in &self.loaders {
-            if let Ok(Some(config)) = loader.try_load() {
-                return Ok(config);
-            }
-        }
-        Ok(DorisConfig::default())
-    }
-}
-
 fn clean_process_info(config: &mut DorisConfig) {
     config.process_pid = None;
     config.process_command = None;
@@ -248,6 +170,13 @@ fn persist_configuration(config: &DorisConfig) {
     }
 }
 
+/// Update environment to Mixed if both FE and BE processes are detected
+fn update_environment_for_mixed_deployment(config: &mut DorisConfig) {
+    if config.fe_process_pid.is_some() && config.be_process_pid.is_some() {
+        config.environment = Environment::Mixed;
+    }
+}
+
 /// Load configuration, first from persisted file, then detect environment and generate if needed
 pub fn load_config() -> Result<DorisConfig> {
     let mut config = config_persister::load_persisted_config().unwrap_or_default();
@@ -258,10 +187,12 @@ pub fn load_config() -> Result<DorisConfig> {
                 config = update_config_from_process(config, current_process)?;
 
                 let _ = update_mixed_deployment(&mut config);
+                update_environment_for_mixed_deployment(&mut config);
 
                 persist_configuration(&config);
             } else {
                 let _ = update_mixed_deployment(&mut config);
+                update_environment_for_mixed_deployment(&mut config);
             }
         }
         Err(_) => {
@@ -284,6 +215,7 @@ fn parse_env_specific_config(env: Environment) -> DorisConfig {
     let result = match env {
         Environment::BE => config_parser::parse_be_config(),
         Environment::FE => config_parser::parse_fe_config(),
+        Environment::Mixed => config_parser::parse_be_config(), // For Mixed, we'll start with BE config and add FE later
         Environment::Unknown => return DorisConfig::default(),
     };
     result.unwrap_or_else(|_| DorisConfig::default())
@@ -300,6 +232,13 @@ fn fallback_load_config() -> Result<DorisConfig> {
 
     let mut config = parse_env_specific_config(env);
     config.environment = env;
+
+    // If we detect both FE and BE processes, update to Mixed environment
+    if env != Environment::Unknown {
+        let _ = update_mixed_deployment(&mut config);
+        update_environment_for_mixed_deployment(&mut config);
+    }
+
     persist_configuration(&config);
     Ok(config)
 }
@@ -322,13 +261,6 @@ pub fn get_current_config() -> Result<DorisConfig> {
 /// Get current process PID from configuration (convenience function)
 pub fn get_current_pid() -> Option<u32> {
     load_config().ok()?.get_valid_pid()
-}
-
-/// Check if current configured process is still valid
-pub fn is_current_process_valid() -> bool {
-    load_config()
-        .map(|config| config.is_process_valid())
-        .unwrap_or(false)
 }
 
 /// Check if configuration needs to be updated based on detected process
@@ -382,74 +314,23 @@ fn update_config_from_process(
                 config.cloud_http_port = parsed_config.cloud_http_port;
                 config.meta_dir = parsed_config.meta_dir;
             }
+            Environment::Mixed => {
+                // For Mixed environment, we'll update both BE and FE ports
+                config.be_port = parsed_config.be_port;
+                config.brpc_port = parsed_config.brpc_port;
+                config.webserver_port = parsed_config.webserver_port;
+                config.heartbeat_service_port = parsed_config.heartbeat_service_port;
+                config.http_port = parsed_config.http_port;
+                config.rpc_port = parsed_config.rpc_port;
+                config.query_port = parsed_config.query_port;
+                config.edit_log_port = parsed_config.edit_log_port;
+                config.cloud_http_port = parsed_config.cloud_http_port;
+                config.meta_dir = parsed_config.meta_dir;
+            }
             Environment::Unknown => {
                 // This shouldn't happen as detect_current_process only returns FE/BE
             }
         }
-    }
-
-    Ok(config)
-}
-
-pub fn get_config_path_mixed(env: Environment) -> Result<PathBuf> {
-    let config = load_config()?;
-    let config_file = match env {
-        Environment::BE => "be.conf",
-        Environment::FE => "fe.conf",
-        _ => return Err(CliError::ConfigError("Invalid environment".to_string())),
-    };
-
-    if config.environment == env {
-        return match env {
-            Environment::BE => process_detector::get_be_config_path(),
-            Environment::FE => process_detector::get_fe_config_path(),
-            _ => unreachable!(),
-        };
-    }
-
-    let install_dir = match env {
-        Environment::BE => &config.be_install_dir,
-        Environment::FE => &config.fe_install_dir,
-        _ => unreachable!(),
-    };
-
-    if let Some(dir) = install_dir {
-        return Ok(dir.join("conf").join(config_file));
-    }
-
-    let all_processes = process_detector::detect_all_processes()?;
-    let process = all_processes.iter().find(|p| p.environment == env);
-
-    if let Some(process) = process {
-        return Ok(process.doris_home.join("conf").join(config_file));
-    }
-
-    Err(CliError::ConfigError(format!(
-        "No {env} installation found in mixed deployment"
-    )))
-}
-
-pub fn is_mixed_deployment_result() -> Result<bool> {
-    let config = load_config()?;
-    Ok(
-        (config.fe_process_pid.is_some() || config.fe_install_dir.is_some())
-            && (config.be_process_pid.is_some() || config.be_install_dir.is_some()),
-    )
-}
-
-pub fn is_mixed_deployment() -> bool {
-    is_mixed_deployment_result().unwrap_or(false)
-}
-
-/// Load configuration using the responsibility chain pattern
-pub fn load_config_with_chain() -> Result<DorisConfig> {
-    let chain = ConfigLoaderChain::new();
-    let mut config = chain.load()?;
-
-    let _ = update_mixed_deployment(&mut config);
-
-    if config.last_detected.is_none() {
-        persist_configuration(&config);
     }
 
     Ok(config)
