@@ -1,4 +1,5 @@
 pub mod be;
+pub mod common;
 pub mod fe;
 
 use crate::config::Config;
@@ -45,6 +46,7 @@ impl ToolRegistry {
     /// Creates a new tool registry with all available tools
     pub fn new() -> Self {
         use crate::tools::be::{BeVarsTool, PstackTool};
+        use crate::tools::be::{JmapDumpTool as BeJmapDumpTool, JmapHistoTool as BeJmapHistoTool};
         use crate::tools::fe::{JmapDumpTool, JmapHistoTool, JstackTool};
 
         let mut registry = Self {
@@ -60,6 +62,8 @@ impl ToolRegistry {
         // Register BE tools
         registry.be_tools.push(Box::new(PstackTool));
         registry.be_tools.push(Box::new(BeVarsTool));
+        registry.be_tools.push(Box::new(BeJmapDumpTool));
+        registry.be_tools.push(Box::new(BeJmapHistoTool));
 
         registry
     }
