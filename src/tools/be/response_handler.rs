@@ -73,7 +73,7 @@ impl<'a> BeResponseHandler<'a> {
                 } else {
                     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
 
-                    let filename = format!("{}_{}.txt", file_prefix, timestamp);
+                    let filename = format!("{file_prefix}_{timestamp}.txt");
                     let output_path = config.output_dir.join(filename);
 
                     fs::write(&output_path, &output)?;

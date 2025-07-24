@@ -63,7 +63,7 @@ fn get_summary(data: &str) -> String {
     let preview = preview_lines.join("\n");
 
     if data.lines().count() > 10 {
-        format!("{}\n... (more content in output file)", preview)
+        format!("{preview}\n... (more content in output file)")
     } else {
         preview
     }
