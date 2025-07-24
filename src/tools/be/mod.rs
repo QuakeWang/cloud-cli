@@ -1,5 +1,5 @@
-mod be_vars;
 mod be_http_client;
+mod be_vars;
 mod jmap;
 mod pipeline_tasks;
 mod pstack;
