@@ -38,11 +38,11 @@ impl Tool for MemzTool {
                 ui::print_success("Memory metrics fetched successfully!");
                 println!();
                 ui::print_info("Results:");
-                println!("{}", metrics_table);
+                println!("{metrics_table}");
 
                 Ok(ExecutionResult {
                     output_path,
-                    message: format!("Jemalloc memory profile saved to {}", path_display),
+                    message: format!("Jemalloc memory profile saved to {path_display}"),
                 })
             }
             Err(e) => {
@@ -82,11 +82,11 @@ impl Tool for MemzGlobalTool {
                 ui::print_success("Global memory metrics fetched successfully!");
                 println!();
                 ui::print_info("Results:");
-                println!("{}", metrics_table);
+                println!("{metrics_table}");
 
                 Ok(ExecutionResult {
                     output_path,
-                    message: format!("Global memory profile saved to {}", path_display),
+                    message: format!("Global memory profile saved to {path_display}"),
                 })
             }
             Err(e) => {
@@ -109,13 +109,13 @@ fn format_bytes(bytes: u64) -> String {
     const GB: u64 = MB * 1024;
 
     if bytes >= GB {
-        format!("{:.2} GB ({} bytes)", bytes as f64 / GB as f64, bytes)
+        format!("{:.2} GB ({bytes} bytes)", bytes as f64 / GB as f64)
     } else if bytes >= MB {
-        format!("{:.2} MB ({} bytes)", bytes as f64 / MB as f64, bytes)
+        format!("{:.2} MB ({bytes} bytes)", bytes as f64 / MB as f64)
     } else if bytes >= KB {
-        format!("{:.2} KB ({} bytes)", bytes as f64 / KB as f64, bytes)
+        format!("{:.2} KB ({bytes} bytes)", bytes as f64 / KB as f64)
     } else {
-        format!("{} bytes", bytes)
+        format!("{bytes} bytes")
     }
 }
 
@@ -136,7 +136,6 @@ fn extract_memory_metrics(html_content: &str) -> (String, String) {
 
     if let Some(caps) = re.captures(html_content) {
         if caps.len() > 6 {
-            // Parse and format the values
             if let Some(bytes) = caps.get(1).and_then(|m| m.as_str().parse::<u64>().ok()) {
                 allocated = format_bytes(bytes);
             }
@@ -184,16 +183,15 @@ fn extract_memory_metrics(html_content: &str) -> (String, String) {
         ┌───────────────────┬────────────────────────────────────┐\n\
         │ Metric            │ Value                              │\n\
         ├───────────────────┼────────────────────────────────────┤\n\
-        │ Allocated         │ {:<34} │\n\
-        │ Active            │ {:<34} │\n\
-        │ Metadata          │ {:<34} │\n\
-        │ Resident          │ {:<34} │\n\
-        │ Mapped            │ {:<34} │\n\
-        │ Retained          │ {:<34} │\n\
-        │ Thread Cache      │ {:<34} │\n\
-        │ Dirty Pages       │ {:<34} │\n\
-        └───────────────────┴────────────────────────────────────┘",
-        allocated, active, metadata, resident, mapped, retained, thread_cache, dirty_pages
+        │ Allocated         │ {allocated:<34} │\n\
+        │ Active            │ {active:<34} │\n\
+        │ Metadata          │ {metadata:<34} │\n\
+        │ Resident          │ {resident:<34} │\n\
+        │ Mapped            │ {mapped:<34} │\n\
+        │ Retained          │ {retained:<34} │\n\
+        │ Thread Cache      │ {thread_cache:<34} │\n\
+        │ Dirty Pages       │ {dirty_pages:<34} │\n\
+        └───────────────────┴────────────────────────────────────┘"
     );
 
     (table, html_content.to_string())
@@ -204,7 +202,7 @@ fn save_html_to_file(config: &Config, html_content: &str, file_prefix: &str) -> 
     config.ensure_output_dir()?;
 
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
-    let filename = format!("{}_{}.html", file_prefix, timestamp);
+    let filename = format!("{file_prefix}_{timestamp}.html");
     let output_path = config.output_dir.join(filename);
 
     fs::write(&output_path, html_content)?;
