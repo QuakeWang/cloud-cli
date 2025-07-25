@@ -102,12 +102,6 @@ impl<'a> ConfigParser for StringConfigParser<'a> {
     }
 }
 
-/// Parse configuration for the specified environment
-pub fn parse_config(env: Environment) -> Result<DorisConfig> {
-    let (install_dir, jdk_path) = process_detector::get_paths(env)?;
-    parse_config_internal(env, &install_dir, &jdk_path)
-}
-
 /// Parse configuration from specified path
 pub fn parse_config_from_path(env: Environment, install_dir: &Path) -> Result<DorisConfig> {
     let jdk_path = PathBuf::from("/opt/jdk");

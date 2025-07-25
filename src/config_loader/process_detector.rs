@@ -207,15 +207,6 @@ fn get_paths_by_pid(pid: u32) -> (PathBuf, PathBuf) {
     (PathBuf::from("/opt/selectdb"), PathBuf::from("/opt/jdk"))
 }
 
-/// Check if a process with given PID is still running
-pub fn is_process_alive(pid: u32) -> bool {
-    Command::new("kill")
-        .args(["-0", &pid.to_string()])
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
-}
-
 /// Verify that a config file exists
 pub fn verify_config_file(path: &Path) -> Result<()> {
     if !path.exists() {
@@ -285,32 +276,4 @@ pub fn detect_mixed_deployment(config: &mut crate::config_loader::DorisConfig) -
     }
 
     Ok(is_mixed)
-}
-
-/// Get config path for the specified environment
-pub fn get_config_path(env: Environment) -> Result<PathBuf> {
-    let (install_path, _) = get_paths(env)?;
-
-    let config_file = match env {
-        Environment::BE => "be.conf",
-        Environment::FE => "fe.conf",
-        Environment::Mixed => {
-            return Err(CliError::ConfigError(
-                "Cannot get config path for Mixed environment".to_string(),
-            ));
-        }
-        _ => return Err(CliError::ConfigError("Invalid environment".to_string())),
-    };
-
-    Ok(install_path.join("conf").join(config_file))
-}
-
-/// Get BE config path
-pub fn get_be_config_path() -> Result<PathBuf> {
-    get_config_path(Environment::BE)
-}
-
-/// Get FE config path
-pub fn get_fe_config_path() -> Result<PathBuf> {
-    get_config_path(Environment::FE)
 }

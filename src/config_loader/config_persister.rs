@@ -203,19 +203,6 @@ impl ConfigConverter<ProcessInfo> for DorisConfig {
     }
 }
 
-impl ConfigConverter<PersistentConfig> for DorisConfig {
-    fn convert_to(&self) -> PersistentConfig {
-        PersistentConfig {
-            metadata: self.convert_to(),
-            paths: self.convert_to(),
-            ports: self.convert_to(),
-            network: self.convert_to(),
-            settings: self.convert_to(),
-            process: self.convert_to(),
-        }
-    }
-}
-
 impl ConfigConverter<DorisConfig> for PersistentConfig {
     fn convert_to(&self) -> DorisConfig {
         let environment = match self.metadata.environment.as_str() {
@@ -379,14 +366,6 @@ pub enum PersistResult {
 impl PersistResult {
     pub fn is_success(&self) -> bool {
         !matches!(self, PersistResult::AllFailed(_))
-    }
-
-    pub fn success_path(&self) -> Option<&PathBuf> {
-        match self {
-            PersistResult::Success(path) => Some(path),
-            PersistResult::PartialSuccess(path, _) => Some(path),
-            PersistResult::AllFailed(_) => None,
-        }
     }
 }
 
@@ -749,55 +728,5 @@ fn to_organized_config(config: &DorisConfig) -> OrganizedConfig {
         network: config.convert_to(),
         settings: config.convert_to(),
         process: config.convert_to(),
-    }
-}
-
-/// Save configuration in organized format
-pub fn save_organized_config(config: &DorisConfig) -> Result<PersistResult> {
-    let config_paths = get_config_file_paths()?;
-    let organized_config = to_organized_config(config);
-    let toml_str = toml::to_string_pretty(&organized_config)?;
-
-    let mut errors = Vec::new();
-
-    for config_path in &config_paths {
-        if let Err(e) = ensure_dir_exists(config_path) {
-            errors.push((
-                config_path.clone(),
-                format!("Failed to create directory: {e}"),
-            ));
-            continue;
-        }
-
-        if !is_path_writable(config_path.parent().unwrap_or(config_path)) {
-            errors.push((config_path.clone(), "No write permission".to_string()));
-            continue;
-        }
-
-        match fs::File::create(config_path) {
-            Ok(mut file) => match file.write_all(toml_str.as_bytes()) {
-                Ok(_) => {
-                    if errors.is_empty() {
-                        return Ok(PersistResult::Success(config_path.clone()));
-                    } else {
-                        return Ok(PersistResult::PartialSuccess(config_path.clone(), errors));
-                    }
-                }
-                Err(e) => {
-                    errors.push((config_path.clone(), format!("Write error: {e}")));
-                }
-            },
-            Err(e) => {
-                errors.push((config_path.clone(), format!("Create file error: {e}")));
-            }
-        }
-    }
-
-    if !errors.is_empty() {
-        Ok(PersistResult::AllFailed(errors))
-    } else {
-        Err(CliError::ConfigError(
-            "No valid paths to persist config".to_string(),
-        ))
     }
 }

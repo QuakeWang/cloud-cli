@@ -20,12 +20,7 @@ const ENV_NO_PROGRESS: &str = "CLOUD_CLI_NO_PROGRESS";
 
 impl Default for Config {
     fn default() -> Self {
-        Self {
-            jdk_path: PathBuf::from("/opt/jdk"),
-            output_dir: PathBuf::from("/opt/selectdb/information"),
-            timeout_seconds: 60,
-            no_progress_animation: false,
-        }
+        config_loader::to_app_config(config_loader::DorisConfig::default())
     }
 }
 
@@ -71,16 +66,6 @@ impl Config {
 
     pub fn with_output_dir<P: Into<PathBuf>>(mut self, path: P) -> Self {
         self.output_dir = path.into();
-        self
-    }
-
-    pub fn with_timeout(mut self, seconds: u64) -> Self {
-        self.timeout_seconds = seconds;
-        self
-    }
-
-    pub fn with_progress_animation(mut self, enable: bool) -> Self {
-        self.no_progress_animation = !enable;
         self
     }
 
