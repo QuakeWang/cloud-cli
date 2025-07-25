@@ -218,7 +218,7 @@ fn handle_tool_execution_error(config: &Config, error: &error::CliError) -> Resu
 
 /// Persist updated configuration to disk
 fn persist_updated_config(config: &Config) -> Result<()> {
-    let mut doris_config = config_loader::get_current_config()?;
+    let mut doris_config = config_loader::load_config()?;
     doris_config = doris_config.with_app_config(config);
     match config_loader::config_persister::persist_config(&doris_config) {
         Ok(_) => Ok(()),

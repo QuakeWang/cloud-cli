@@ -25,6 +25,7 @@ impl std::fmt::Display for Environment {
     }
 }
 
+/// Doris configuration model with all system settings
 #[derive(Debug, Clone)]
 pub struct DorisConfig {
     pub environment: Environment,
@@ -159,8 +160,16 @@ fn clean_process_info(config: &mut DorisConfig) {
     config.be_install_dir = None;
 }
 
-fn update_mixed_deployment(config: &mut DorisConfig) -> Result<()> {
+/// Update mixed deployment detection and environment setting
+fn update_mixed_environment(config: &mut DorisConfig) -> Result<()> {
+    // Detect if both FE and BE processes are running
     process_detector::detect_mixed_deployment(config)?;
+
+    // Update environment to Mixed if both FE and BE processes are detected
+    if config.fe_process_pid.is_some() && config.be_process_pid.is_some() {
+        config.environment = Environment::Mixed;
+    }
+
     Ok(())
 }
 
@@ -170,11 +179,46 @@ fn persist_configuration(config: &DorisConfig) {
     }
 }
 
-/// Update environment to Mixed if both FE and BE processes are detected
-fn update_environment_for_mixed_deployment(config: &mut DorisConfig) {
-    if config.fe_process_pid.is_some() && config.be_process_pid.is_some() {
-        config.environment = Environment::Mixed;
+/// Apply environment-specific port configurations
+fn apply_environment_specific_ports(
+    config: &mut DorisConfig,
+    parsed_config: &DorisConfig,
+    env: Environment,
+) {
+    match env {
+        Environment::BE => {
+            apply_be_ports(config, parsed_config);
+        }
+        Environment::FE => {
+            apply_fe_ports(config, parsed_config);
+        }
+        Environment::Mixed => {
+            // For Mixed environment, apply both BE and FE configurations
+            apply_be_ports(config, parsed_config);
+            apply_fe_ports(config, parsed_config);
+        }
+        Environment::Unknown => {
+            // No specific ports to apply for unknown environment
+        }
     }
+}
+
+/// Apply BE-specific port configurations
+fn apply_be_ports(config: &mut DorisConfig, parsed_config: &DorisConfig) {
+    config.be_port = parsed_config.be_port;
+    config.brpc_port = parsed_config.brpc_port;
+    config.webserver_port = parsed_config.webserver_port;
+    config.heartbeat_service_port = parsed_config.heartbeat_service_port;
+}
+
+/// Apply FE-specific port configurations
+fn apply_fe_ports(config: &mut DorisConfig, parsed_config: &DorisConfig) {
+    config.http_port = parsed_config.http_port;
+    config.rpc_port = parsed_config.rpc_port;
+    config.query_port = parsed_config.query_port;
+    config.edit_log_port = parsed_config.edit_log_port;
+    config.cloud_http_port = parsed_config.cloud_http_port;
+    config.meta_dir = parsed_config.meta_dir.clone();
 }
 
 /// Load configuration, first from persisted file, then detect environment and generate if needed
@@ -185,14 +229,10 @@ pub fn load_config() -> Result<DorisConfig> {
         Ok(current_process) => {
             if needs_config_update(&config, &current_process) {
                 config = update_config_from_process(config, current_process)?;
-
-                let _ = update_mixed_deployment(&mut config);
-                update_environment_for_mixed_deployment(&mut config);
-
+                let _ = update_mixed_environment(&mut config);
                 persist_configuration(&config);
             } else {
-                let _ = update_mixed_deployment(&mut config);
-                update_environment_for_mixed_deployment(&mut config);
+                let _ = update_mixed_environment(&mut config);
             }
         }
         Err(_) => {
@@ -215,7 +255,7 @@ fn parse_env_specific_config(env: Environment) -> DorisConfig {
     let result = match env {
         Environment::BE => config_parser::parse_be_config(),
         Environment::FE => config_parser::parse_fe_config(),
-        Environment::Mixed => config_parser::parse_be_config(), // For Mixed, we'll start with BE config and add FE later
+        Environment::Mixed => config_parser::parse_be_config(),
         Environment::Unknown => return DorisConfig::default(),
     };
     result.unwrap_or_else(|_| DorisConfig::default())
@@ -235,8 +275,7 @@ fn fallback_load_config() -> Result<DorisConfig> {
 
     // If we detect both FE and BE processes, update to Mixed environment
     if env != Environment::Unknown {
-        let _ = update_mixed_deployment(&mut config);
-        update_environment_for_mixed_deployment(&mut config);
+        let _ = update_mixed_environment(&mut config);
     }
 
     persist_configuration(&config);
@@ -251,11 +290,6 @@ pub fn to_app_config(doris_config: DorisConfig) -> crate::config::Config {
         timeout_seconds: doris_config.timeout_seconds,
         no_progress_animation: doris_config.no_progress_animation,
     }
-}
-
-/// Get the current Doris configuration
-pub fn get_current_config() -> Result<DorisConfig> {
-    load_config()
 }
 
 /// Get current process PID from configuration (convenience function)
@@ -299,38 +333,8 @@ fn update_config_from_process(
     if let Ok(parsed_config) =
         config_parser::parse_config_from_path(process.environment, &process.doris_home)
     {
-        match process.environment {
-            Environment::BE => {
-                config.be_port = parsed_config.be_port;
-                config.brpc_port = parsed_config.brpc_port;
-                config.webserver_port = parsed_config.webserver_port;
-                config.heartbeat_service_port = parsed_config.heartbeat_service_port;
-            }
-            Environment::FE => {
-                config.http_port = parsed_config.http_port;
-                config.rpc_port = parsed_config.rpc_port;
-                config.query_port = parsed_config.query_port;
-                config.edit_log_port = parsed_config.edit_log_port;
-                config.cloud_http_port = parsed_config.cloud_http_port;
-                config.meta_dir = parsed_config.meta_dir;
-            }
-            Environment::Mixed => {
-                // For Mixed environment, we'll update both BE and FE ports
-                config.be_port = parsed_config.be_port;
-                config.brpc_port = parsed_config.brpc_port;
-                config.webserver_port = parsed_config.webserver_port;
-                config.heartbeat_service_port = parsed_config.heartbeat_service_port;
-                config.http_port = parsed_config.http_port;
-                config.rpc_port = parsed_config.rpc_port;
-                config.query_port = parsed_config.query_port;
-                config.edit_log_port = parsed_config.edit_log_port;
-                config.cloud_http_port = parsed_config.cloud_http_port;
-                config.meta_dir = parsed_config.meta_dir;
-            }
-            Environment::Unknown => {
-                // This shouldn't happen as detect_current_process only returns FE/BE
-            }
-        }
+        // Apply port configurations based on environment
+        apply_environment_specific_ports(&mut config, &parsed_config, process.environment);
     }
 
     Ok(config)

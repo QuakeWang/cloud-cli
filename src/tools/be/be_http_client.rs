@@ -44,7 +44,7 @@ pub fn request_be_webserver_port(endpoint: &str, filter_pattern: Option<&str>) -
 
 /// Get BE HTTP ports from configuration or use defaults
 pub fn get_be_http_ports() -> Result<Vec<u16>> {
-    match config_loader::get_current_config() {
+    match config_loader::load_config() {
         Ok(doris_config) => Ok(doris_config.get_be_http_ports()),
         Err(_) => {
             // Fallback to default ports if configuration cannot be loaded

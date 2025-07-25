@@ -80,12 +80,4 @@ impl ToolRegistry {
     pub fn be_tools(&self) -> &[Box<dyn Tool>] {
         &self.be_tools
     }
-
-    pub fn get_fe_tool(&self, index: usize) -> Option<&dyn Tool> {
-        self.fe_tools.get(index).map(|b| &**b)
-    }
-
-    pub fn get_be_tool(&self, index: usize) -> Option<&dyn Tool> {
-        self.be_tools.get(index).map(|b| &**b)
-    }
 }
