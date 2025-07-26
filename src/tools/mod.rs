@@ -1,6 +1,7 @@
 pub mod be;
 pub mod common;
 pub mod fe;
+pub mod mysql;
 
 use crate::config::Config;
 use crate::error::Result;

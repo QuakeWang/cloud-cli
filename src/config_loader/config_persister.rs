@@ -3,7 +3,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use crate::config_loader::{DorisConfig, Environment};
+use crate::config_loader::{DorisConfig, Environment, MySQLConfig};
 use crate::error::{CliError, Result};
 
 trait ConfigConverter<T> {
@@ -20,6 +20,7 @@ struct OrganizedConfig {
     network: Network,
     settings: Settings,
     process: ProcessInfo,
+    mysql: Option<MySQLConfig>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -247,6 +248,7 @@ impl ConfigConverter<DorisConfig> for PersistentConfig {
             meta_dir: self.paths.meta_dir.as_ref().map(PathBuf::from),
             priority_networks: self.network.priority_networks.clone(),
             meta_service_endpoint: self.network.meta_service_endpoint.clone(),
+            mysql: self.mysql.clone(),
         }
     }
 }
@@ -303,6 +305,7 @@ fn from_persistent_config(persistent: PersistentConfig) -> DorisConfig {
         meta_dir: persistent.paths.meta_dir.as_ref().map(PathBuf::from),
         priority_networks: persistent.network.priority_networks.clone(),
         meta_service_endpoint: persistent.network.meta_service_endpoint.clone(),
+        mysql: persistent.mysql.clone(),
     }
 }
 
@@ -448,6 +451,7 @@ fn migrate_legacy_config(content: &str, config_path: &Path) -> Option<DorisConfi
                     fe_process_command: None,
                     fe_install_dir: None,
                 },
+                mysql: None,
             };
 
             match toml::to_string_pretty(&new_config) {
@@ -479,12 +483,14 @@ pub fn load_persisted_config() -> Result<DorisConfig> {
 
         match fs::read_to_string(&config_path) {
             Ok(content) => {
-                // First try to parse as OrganizedConfig
+                if let Some(config) = parse_legacy_config_with_mysql(&content) {
+                    return Ok(config);
+                }
+
                 if let Ok(organized_config) = toml::from_str::<OrganizedConfig>(&content) {
                     return Ok(from_organized_config(&organized_config));
                 }
 
-                // If that fails, try as PersistentConfig
                 match toml::from_str::<PersistentConfig>(&content) {
                     Ok(persistent_config) => {
                         return Ok(from_persistent_config(persistent_config));
@@ -520,6 +526,69 @@ pub fn load_persisted_config() -> Result<DorisConfig> {
             Ok(DorisConfig::default())
         }
         None => Ok(DorisConfig::default()),
+    }
+}
+
+/// Parse legacy config format that includes mysql section
+fn parse_legacy_config_with_mysql(content: &str) -> Option<DorisConfig> {
+    #[derive(Deserialize)]
+    struct LegacyConfigWithMySQL {
+        metadata: Metadata,
+        paths: CommonPaths,
+        network: Network,
+        settings: Settings,
+        process: ProcessInfo,
+        mysql: Option<MySQLConfig>,
+    }
+
+    match toml::from_str::<LegacyConfigWithMySQL>(content) {
+        Ok(legacy) => {
+            let environment = match legacy.metadata.environment.as_str() {
+                "FE" => Environment::FE,
+                "BE" => Environment::BE,
+                "FE + BE" => Environment::Mixed,
+                _ => Environment::Unknown,
+            };
+
+            Some(DorisConfig {
+                environment,
+                install_dir: PathBuf::from("/opt/selectdb"),
+                conf_dir: PathBuf::from("/opt/selectdb/conf"),
+                log_dir: PathBuf::from("/opt/selectdb/log"),
+                jdk_path: PathBuf::from(&legacy.paths.jdk_path),
+                output_dir: PathBuf::from(&legacy.paths.output_dir),
+                timeout_seconds: legacy.settings.timeout_seconds,
+                no_progress_animation: legacy.settings.no_progress_animation,
+                process_pid: legacy.process.pid,
+                process_command: legacy.process.command.clone(),
+                last_detected: legacy
+                    .process
+                    .last_detected
+                    .as_ref()
+                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                    .map(|dt| dt.with_timezone(&chrono::Utc)),
+                be_process_pid: legacy.process.be_process_pid,
+                be_process_command: legacy.process.be_process_command.clone(),
+                be_install_dir: legacy.process.be_install_dir.as_ref().map(PathBuf::from),
+                fe_process_pid: legacy.process.fe_process_pid,
+                fe_process_command: legacy.process.fe_process_command.clone(),
+                fe_install_dir: legacy.process.fe_install_dir.as_ref().map(PathBuf::from),
+                be_port: None,
+                brpc_port: None,
+                heartbeat_service_port: None,
+                webserver_port: None,
+                http_port: None,
+                rpc_port: None,
+                query_port: None,
+                edit_log_port: None,
+                cloud_http_port: None,
+                meta_dir: None,
+                priority_networks: legacy.network.priority_networks.clone(),
+                meta_service_endpoint: legacy.network.meta_service_endpoint.clone(),
+                mysql: legacy.mysql,
+            })
+        }
+        Err(_) => None,
     }
 }
 
@@ -578,6 +647,7 @@ fn from_organized_config(organized: &OrganizedConfig) -> DorisConfig {
         fe_process_pid: None,
         fe_process_command: None,
         fe_install_dir: None,
+        mysql: organized.mysql.clone(),
     };
 
     // Set BE specific configurations if available
@@ -643,6 +713,7 @@ struct PersistentConfig {
     network: Network,
     settings: Settings,
     process: ProcessInfo,
+    mysql: Option<MySQLConfig>,
 }
 
 /// Convert DorisConfig to the new organized format
@@ -728,5 +799,6 @@ fn to_organized_config(config: &DorisConfig) -> OrganizedConfig {
         network: config.convert_to(),
         settings: config.convert_to(),
         process: config.convert_to(),
+        mysql: config.mysql.clone(),
     }
 }
