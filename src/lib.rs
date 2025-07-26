@@ -7,14 +7,36 @@ pub mod tools;
 pub mod ui;
 
 use config::Config;
+use config_loader::{load_config, persist_configuration};
+use dialoguer::Confirm;
 use error::Result;
+use tools::mysql::CredentialManager;
 use tools::{Tool, ToolRegistry};
 use ui::*;
 
 /// Main CLI application runner
-pub fn run_cli(config: Config) -> Result<()> {
+pub fn run_cli() -> Result<()> {
+    let mut doris_config = load_config()?;
+
+    let config = config_loader::to_app_config(doris_config.clone());
+    if let Err(e) = config.validate() {
+        ui::print_error(&format!("Config warning: {e}"));
+    }
+
+    let cred_mgr = CredentialManager::new()?;
+    if doris_config.mysql.is_none()
+        && Confirm::new()
+            .with_prompt("MySQL credentials not detected. Configure now?")
+            .default(true)
+            .interact()?
+    {
+        let (user, password) = cred_mgr.prompt_credentials_with_connection_test()?;
+        let mysql_config = cred_mgr.encrypt_credentials(&user, &password)?;
+        doris_config.mysql = Some(mysql_config);
+        persist_configuration(&doris_config);
+    }
+
     let registry = ToolRegistry::new();
-    // Create a mutable configuration that can be updated
     let mut current_config = config;
 
     loop {
