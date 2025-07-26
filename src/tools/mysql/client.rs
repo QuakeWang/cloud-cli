@@ -49,9 +49,7 @@ Error: {}",
                 }
             }
             Err(e) => Err(CliError::ProcessExecutionFailed(format!(
-                "Failed to execute mysql command: {}
-Please ensure the mysql client is installed and in the environment.",
-                e
+                "Failed to execute mysql command: {e}\nPlease ensure the mysql client is installed and in the environment."
             ))),
         }
     }

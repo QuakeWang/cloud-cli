@@ -52,8 +52,7 @@ impl CredentialManager {
                 Ok(params) => params,
                 Err(e) => {
                     eprintln!(
-                        "[!] Warning: Could not get connection parameters, using default values: {}",
-                        e
+                        "[!] Warning: Could not get connection parameters, using default values: {e}"
                     );
                     ("127.0.0.1".to_string(), 9030)
                 }
@@ -67,7 +66,7 @@ impl CredentialManager {
                     return Ok((user, password));
                 }
                 Err(e) => {
-                    eprintln!("❌ {}", e);
+                    eprintln!("❌ {e}");
 
                     let retry = Confirm::new()
                         .with_prompt(
