@@ -96,14 +96,17 @@ impl CredentialManager {
         if encrypted.is_empty() {
             return Ok(String::new());
         }
-        let combined = general_purpose::STANDARD.decode(encrypted).map_err(|e| std::io::Error::other(format!("Base64 decode failed: {e}")))?;
+        let combined = general_purpose::STANDARD
+            .decode(encrypted)
+            .map_err(|e| std::io::Error::other(format!("Base64 decode failed: {e}")))?;
         if combined.len() < 12 {
             return Err(std::io::Error::other("Invalid encrypted data").into());
         }
         let (nonce_bytes, ciphertext) = combined.split_at(12);
         let nonce = Nonce::from_slice(nonce_bytes);
         let cipher = Aes256Gcm::new(&self.key);
-        let plaintext = cipher.decrypt(nonce, ciphertext)
+        let plaintext = cipher
+            .decrypt(nonce, ciphertext)
             .map_err(|e| std::io::Error::other(format!("Decryption failed: {e}")))?;
         let s = String::from_utf8(plaintext)
             .map_err(|e| std::io::Error::other(format!("UTF8 decode failed: {e}")))?;

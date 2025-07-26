@@ -1,5 +1,5 @@
-use crate::config_loader::process_detector;
 use crate::config_loader::Environment;
+use crate::config_loader::process_detector;
 use crate::error::{CliError, Result};
 use std::process::Command;
 
@@ -57,7 +57,8 @@ Please ensure the mysql client is installed and in the environment.",
     }
 
     pub fn get_connection_params() -> Result<(String, u16)> {
-        if let (Ok(host), Ok(port_str)) = (std::env::var("MYSQL_HOST"), std::env::var("MYSQL_PORT")) {
+        if let (Ok(host), Ok(port_str)) = (std::env::var("MYSQL_HOST"), std::env::var("MYSQL_PORT"))
+        {
             if let Ok(port) = port_str.parse::<u16>() {
                 return Ok((host, port));
             }
