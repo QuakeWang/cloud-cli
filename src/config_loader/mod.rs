@@ -1,4 +1,5 @@
 use crate::error::Result;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 pub mod config_parser;
@@ -23,6 +24,12 @@ impl std::fmt::Display for Environment {
             Environment::Unknown => write!(f, "Unknown"),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MySQLConfig {
+    pub user: String,
+    pub password: String,
 }
 
 /// Doris configuration model with all system settings
@@ -69,6 +76,7 @@ pub struct DorisConfig {
     // Network configurations
     pub priority_networks: Option<String>,
     pub meta_service_endpoint: Option<String>,
+    pub mysql: Option<MySQLConfig>,
 }
 
 impl Default for DorisConfig {
@@ -103,6 +111,7 @@ impl Default for DorisConfig {
             fe_process_pid: None,
             fe_process_command: None,
             fe_install_dir: None,
+            mysql: None,
         }
     }
 }
@@ -173,7 +182,8 @@ fn update_mixed_environment(config: &mut DorisConfig) -> Result<()> {
     Ok(())
 }
 
-fn persist_configuration(config: &DorisConfig) {
+/// Persist configuration to file
+pub fn persist_configuration(config: &DorisConfig) {
     if let Err(e) = config_persister::persist_config(config) {
         eprintln!("Warning: Failed to persist configuration: {e}");
     }
@@ -223,7 +233,16 @@ fn apply_fe_ports(config: &mut DorisConfig, parsed_config: &DorisConfig) {
 
 /// Load configuration, first from persisted file, then detect environment and generate if needed
 pub fn load_config() -> Result<DorisConfig> {
-    let mut config = config_persister::load_persisted_config().unwrap_or_default();
+    let config_result = config_persister::load_persisted_config();
+
+    let mut config = match config_result {
+        Ok(config) => config,
+        Err(_) => {
+            let fallback_config = fallback_load_config()?;
+            persist_configuration(&fallback_config);
+            return Ok(fallback_config);
+        }
+    };
 
     match process_detector::detect_current_process() {
         Ok(current_process) => {
@@ -241,8 +260,18 @@ pub fn load_config() -> Result<DorisConfig> {
                 persist_configuration(&config);
             }
 
-            if config.environment == Environment::Unknown {
-                return fallback_load_config();
+            if config.environment == Environment::Unknown
+                && config.process_pid.is_none()
+                && config.fe_process_pid.is_none()
+                && config.be_process_pid.is_none()
+            {
+                let fallback_config = fallback_load_config()?;
+                if config.mysql.is_some() {
+                    let mut new_config = fallback_config;
+                    new_config.mysql = config.mysql;
+                    return Ok(new_config);
+                }
+                return Ok(fallback_config);
             }
         }
     }
@@ -263,9 +292,15 @@ fn parse_env_specific_config(env: Environment) -> DorisConfig {
 
 /// Fallback to original configuration loading behavior
 fn fallback_load_config() -> Result<DorisConfig> {
+    let existing_config = config_persister::load_persisted_config().ok();
+    let existing_mysql = existing_config.as_ref().and_then(|c| c.mysql.clone());
+
     let env = match process_detector::detect_environment() {
         Ok(env) => env,
         Err(_) => {
+            if let Some(config) = existing_config {
+                return Ok(config);
+            }
             return Ok(DorisConfig::default());
         }
     };
@@ -273,7 +308,10 @@ fn fallback_load_config() -> Result<DorisConfig> {
     let mut config = parse_env_specific_config(env);
     config.environment = env;
 
-    // If we detect both FE and BE processes, update to Mixed environment
+    if let Some(mysql_config) = existing_mysql {
+        config.mysql = Some(mysql_config);
+    }
+
     if env != Environment::Unknown {
         let _ = update_mixed_environment(&mut config);
     }
@@ -315,27 +353,26 @@ fn update_config_from_process(
     mut config: DorisConfig,
     process: process_detector::ProcessDetectionResult,
 ) -> Result<DorisConfig> {
-    // Update process information
+    let mysql_config = config.mysql.clone();
+
     config.process_pid = Some(process.pid);
     config.process_command = Some(process.command);
     config.last_detected = Some(chrono::Utc::now());
 
-    // Update environment and paths
     config.environment = process.environment;
     config.install_dir = process.doris_home.clone();
     config.jdk_path = process.java_home.clone();
 
-    // Update related paths based on environment
     config.conf_dir = process.doris_home.join("conf");
     config.log_dir = process.doris_home.join("log");
 
-    // Try to parse configuration for port information using detected path
     if let Ok(parsed_config) =
         config_parser::parse_config_from_path(process.environment, &process.doris_home)
     {
-        // Apply port configurations based on environment
         apply_environment_specific_ports(&mut config, &parsed_config, process.environment);
     }
+
+    config.mysql = mysql_config;
 
     Ok(config)
 }
