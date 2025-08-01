@@ -17,13 +17,13 @@ impl MySQLTool {
     ) -> Result<crate::tools::mysql::ClusterInfo> {
         let frontends_output =
             Self::query_sql_with_config(config, "SHOW FRONTENDS \\G").map_err(|e| {
-                crate::error::CliError::ConfigError(format!("Failed to query frontends: {}", e))
+                crate::error::CliError::ConfigError(format!("Failed to query frontends: {e}"))
             })?;
         let frontends = crate::tools::mysql::parse_frontends(&frontends_output);
 
         let backends_output =
             Self::query_sql_with_config(config, "SHOW BACKENDS \\G").map_err(|e| {
-                crate::error::CliError::ConfigError(format!("Failed to query backends: {}", e))
+                crate::error::CliError::ConfigError(format!("Failed to query backends: {e}"))
             })?;
         let backends = crate::tools::mysql::parse_backends(&backends_output);
 
