@@ -10,6 +10,7 @@ use config::Config;
 use config_loader::{load_config, persist_configuration};
 use dialoguer::Confirm;
 use error::Result;
+use std::thread;
 use tools::mysql::CredentialManager;
 use tools::{Tool, ToolRegistry};
 use ui::*;
@@ -23,18 +24,58 @@ pub fn run_cli() -> Result<()> {
         ui::print_error(&format!("Config warning: {e}"));
     }
 
+    let fe_process_exists =
+        config_loader::process_detector::get_pid_by_env(config_loader::Environment::FE).is_ok();
+    let has_mysql = doris_config.mysql.is_some();
+
     let cred_mgr = CredentialManager::new()?;
-    if doris_config.mysql.is_none()
+    if fe_process_exists
+        && !has_mysql
         && Confirm::new()
             .with_prompt("MySQL credentials not detected. Configure now?")
             .default(true)
             .interact()?
     {
-        let (user, password) = cred_mgr.prompt_credentials_with_connection_test()?;
-        let mysql_config = cred_mgr.encrypt_credentials(&user, &password)?;
-        doris_config.mysql = Some(mysql_config);
-        persist_configuration(&doris_config);
+        let mut success = false;
+        for _ in 0..3 {
+            match cred_mgr.prompt_credentials_with_connection_test() {
+                Ok((user, password)) => {
+                    let mysql_config = cred_mgr.encrypt_credentials(&user, &password)?;
+                    doris_config.mysql = Some(mysql_config);
+                    persist_configuration(&doris_config);
+
+                    match tools::mysql::MySQLTool.query_cluster_info(&doris_config) {
+                        Ok(cluster_info) => {
+                            if let Err(e) = cluster_info.save_to_file() {
+                                ui::print_warning(&format!("Failed to save cluster info: {e}"));
+                            }
+                        }
+                        Err(e) => {
+                            ui::print_warning(&format!("Failed to collect cluster info: {e}"));
+                        }
+                    }
+
+                    success = true;
+                    break;
+                }
+                Err(e) => {
+                    ui::print_warning(&format!("MySQL credential setup failed: {e}"));
+                }
+            }
+        }
+        if !success {
+            ui::print_warning(
+                "MySQL credential setup failed after 3 attempts. You can configure it later in the settings.",
+            );
+        }
     }
+
+    // Collect cluster info asynchronously in the background
+    let background_handle = if fe_process_exists && has_mysql {
+        Some(spawn_cluster_info_collector(doris_config.clone()))
+    } else {
+        None
+    };
 
     let registry = ToolRegistry::new();
     let mut current_config = config;
@@ -63,7 +104,117 @@ pub fn run_cli() -> Result<()> {
         current_config = Config::new();
     }
 
+    // Wait for background task to complete
+    if let Some(handle) = background_handle {
+        let _ = handle.join();
+    }
+
     ui::print_goodbye();
+    Ok(())
+}
+
+/// Collect cluster info asynchronously in the background
+fn spawn_cluster_info_collector(
+    doris_config: crate::config_loader::DorisConfig,
+) -> std::thread::JoinHandle<()> {
+    thread::spawn(move || {
+        // Delay a short time to avoid blocking main program startup
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // Check if cluster info needs to be updated
+        if should_update_cluster_info() {
+            collect_cluster_info_with_retry(&doris_config);
+        }
+    })
+}
+
+/// Collect cluster info with retry mechanism and timeout
+fn collect_cluster_info_with_retry(doris_config: &crate::config_loader::DorisConfig) {
+    const MAX_RETRIES: u32 = 3;
+    const RETRY_DELAY_SECS: u64 = 2;
+    const TIMEOUT_SECS: u64 = 30;
+
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(TIMEOUT_SECS);
+    let mut retry_count = 0;
+
+    while retry_count < MAX_RETRIES && start.elapsed() < timeout {
+        match collect_cluster_info_background(doris_config) {
+            Ok(_) => {
+                // Successfully collected, exit retry loop
+                break;
+            }
+            Err(e) => {
+                retry_count += 1;
+
+                // Don't retry on authentication errors
+                if let crate::error::CliError::MySQLAccessDenied(_) = e {
+                    break;
+                }
+
+                // Don't retry on configuration errors
+                if let crate::error::CliError::ConfigError(_) = e {
+                    break;
+                }
+
+                if retry_count >= MAX_RETRIES || start.elapsed() >= timeout {
+                    // Only log in debug mode and avoid excessive output
+                    if std::env::var("CLOUD_CLI_DEBUG").is_ok() {
+                        eprintln!(
+                            "Background cluster info collection failed after {retry_count} attempts: {e}"
+                        );
+                    }
+                    break;
+                } else {
+                    // Wait before retrying
+                    std::thread::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS));
+                }
+            }
+        }
+    }
+}
+
+/// Check if cluster info needs to be updated
+fn should_update_cluster_info() -> bool {
+    let clusters_file = match dirs::home_dir() {
+        Some(home) => home.join(".config").join("cloud-cli").join("clusters.toml"),
+        None => return true, // Unable to determine path, default to update
+    };
+
+    if !clusters_file.exists() {
+        return true;
+    }
+
+    let metadata = match std::fs::metadata(&clusters_file) {
+        Ok(m) => m,
+        Err(_) => return true, // Unable to get metadata, default to update
+    };
+
+    if metadata.len() < 100 {
+        return true;
+    }
+
+    let modified = match metadata.modified() {
+        Ok(m) => m,
+        Err(_) => return true, // Unable to get modification time, default to update
+    };
+
+    let duration = match std::time::SystemTime::now().duration_since(modified) {
+        Ok(d) => d,
+        Err(_) => return true, // Time error, default to update
+    };
+
+    duration.as_secs() > 300 // 5 minutes
+}
+
+/// Implementation for collecting cluster info in the background
+fn collect_cluster_info_background(doris_config: &crate::config_loader::DorisConfig) -> Result<()> {
+    if doris_config.mysql.is_none() {
+        return Ok(());
+    }
+    let mysql_tool = tools::mysql::MySQLTool;
+    let cluster_info = mysql_tool.query_cluster_info(doris_config)?;
+    cluster_info.save_to_file()?;
     Ok(())
 }
 
