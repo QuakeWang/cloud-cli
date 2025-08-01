@@ -24,7 +24,7 @@ pub fn split_into_blocks(output: &str) -> Vec<String> {
             }
             current_block.clear();
         }
-        
+
         current_block.push_str(line);
         current_block.push('\n');
     }
