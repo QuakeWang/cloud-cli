@@ -1,10 +1,9 @@
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::config_loader::{DorisConfig, Environment, MySQLConfig};
 use crate::error::{CliError, Result};
+use crate::tools::common::fs_utils;
 
 trait ConfigConverter<T> {
     fn convert_to(&self) -> T;
@@ -314,50 +313,10 @@ fn get_config_file_paths() -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
 
     // Only use the standard user config directory path
-    if let Some(home_dir) = dirs::home_dir() {
-        paths.push(
-            home_dir
-                .join(".config")
-                .join("cloud-cli")
-                .join("config.toml"),
-        );
-    }
-
-    if paths.is_empty() {
-        return Err(CliError::ConfigError(
-            "Could not determine user home directory for config path".to_string(),
-        ));
-    }
+    let config_dir = fs_utils::get_user_config_dir()?;
+    paths.push(config_dir.join("config.toml"));
 
     Ok(paths)
-}
-
-/// Try to create directory if it doesn't exist
-fn ensure_dir_exists(path: &Path) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            fs::create_dir_all(parent).map_err(|e| {
-                CliError::ConfigError(format!(
-                    "Failed to create directory {}: {}",
-                    parent.display(),
-                    e
-                ))
-            })?;
-        }
-    }
-    Ok(())
-}
-
-/// Test if a path is writable
-fn is_path_writable(path: &Path) -> bool {
-    let test_file = path.with_file_name(".write_test_temp");
-    match std::fs::File::create(&test_file) {
-        Ok(_) => {
-            let _ = std::fs::remove_file(test_file);
-            true
-        }
-        Err(_) => false,
-    }
 }
 
 pub enum PersistResult {
@@ -376,39 +335,20 @@ impl PersistResult {
 pub fn persist_config(config: &DorisConfig) -> Result<PersistResult> {
     let config_paths = get_config_file_paths()?;
     let organized_config = to_organized_config(config);
-    let toml_str = toml::to_string_pretty(&organized_config)?;
 
     let mut errors = Vec::new();
 
     for config_path in &config_paths {
-        if let Err(e) = ensure_dir_exists(config_path) {
-            errors.push((
-                config_path.clone(),
-                format!("Failed to create directory: {e}"),
-            ));
-            continue;
-        }
-
-        if !is_path_writable(config_path.parent().unwrap_or(config_path)) {
-            errors.push((config_path.clone(), "No write permission".to_string()));
-            continue;
-        }
-
-        match fs::File::create(config_path) {
-            Ok(mut file) => match file.write_all(toml_str.as_bytes()) {
-                Ok(_) => {
-                    if errors.is_empty() {
-                        return Ok(PersistResult::Success(config_path.clone()));
-                    } else {
-                        return Ok(PersistResult::PartialSuccess(config_path.clone(), errors));
-                    }
+        match fs_utils::save_toml_to_file(&organized_config, config_path) {
+            Ok(_) => {
+                if errors.is_empty() {
+                    return Ok(PersistResult::Success(config_path.clone()));
+                } else {
+                    return Ok(PersistResult::PartialSuccess(config_path.clone(), errors));
                 }
-                Err(e) => {
-                    errors.push((config_path.clone(), format!("Write error: {e}")));
-                }
-            },
+            }
             Err(e) => {
-                errors.push((config_path.clone(), format!("Create file error: {e}")));
+                errors.push((config_path.clone(), e.to_string()));
             }
         }
     }
@@ -454,14 +394,12 @@ fn migrate_legacy_config(content: &str, config_path: &Path) -> Option<DorisConfi
                 mysql: None,
             };
 
-            match toml::to_string_pretty(&new_config) {
-                Ok(new_content) => {
-                    if let Err(e) = fs::write(config_path, new_content) {
-                        eprintln!("Warning: Failed to save migrated config: {e}");
-                    }
+            match fs_utils::save_toml_to_file(&new_config, config_path) {
+                Ok(_) => {
+                    // Migration successful
                 }
                 Err(e) => {
-                    eprintln!("Warning: Failed to serialize migrated config: {e}");
+                    eprintln!("Warning: Failed to save migrated config: {e}");
                 }
             }
 
@@ -481,7 +419,7 @@ pub fn load_persisted_config() -> Result<DorisConfig> {
             continue;
         }
 
-        match fs::read_to_string(&config_path) {
+        match fs_utils::read_file_content(&config_path) {
             Ok(content) => {
                 if let Some(config) = parse_legacy_config_with_mysql(&content) {
                     return Ok(config);
@@ -503,18 +441,16 @@ pub fn load_persisted_config() -> Result<DorisConfig> {
                         }
 
                         last_error = Some(CliError::ConfigError(format!(
-                            "Failed to parse config file {}: {}",
-                            config_path.display(),
-                            e
+                            "Failed to parse config file {}: {e}",
+                            config_path.display()
                         )));
                     }
                 }
             }
             Err(e) => {
                 last_error = Some(CliError::ConfigError(format!(
-                    "Failed to read config file {}: {}",
-                    config_path.display(),
-                    e
+                    "Failed to read config file {}: {e}",
+                    config_path.display()
                 )));
             }
         }

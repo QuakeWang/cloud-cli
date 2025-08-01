@@ -1,11 +1,12 @@
-use super::client::MySQLTool;
-use crate::config_loader::MySQLConfig;
-use crate::error::Result;
+use crate::config_loader::{DorisConfig, MySQLConfig};
+use crate::error::{CliError, Result};
+use crate::tools::mysql::MySQLTool;
+
 use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use base64::{Engine as _, engine::general_purpose};
-use dialoguer::{Confirm, Input, Password};
+use dialoguer::{Input, Password};
 use std::fs;
 use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
@@ -15,12 +16,6 @@ type Aes256GcmKey = aes_gcm::Key<Aes256Gcm>;
 
 const CONFIG_DIR: &str = ".config/cloud-cli";
 const KEY_FILE: &str = "key";
-
-#[derive(Debug)]
-pub struct MySQLCredentials {
-    pub user: String,
-    pub password: String,
-}
 
 pub struct CredentialManager {
     key: Aes256GcmKey,
@@ -45,42 +40,33 @@ impl CredentialManager {
     }
 
     pub fn prompt_credentials_with_connection_test(&self) -> Result<(String, String)> {
-        loop {
+        let max_retries = 3;
+        for attempt in 0..max_retries {
             let (user, password) = self.prompt_for_credentials()?;
-
-            let (host, port) = match MySQLTool::get_connection_params() {
-                Ok(params) => params,
-                Err(e) => {
-                    eprintln!(
-                        "[!] Warning: Could not get connection parameters, using default values: {e}"
-                    );
-                    ("127.0.0.1".to_string(), 9030)
-                }
+            // Build a temporary DorisConfig for connection test
+            let config = DorisConfig {
+                mysql: Some(MySQLConfig {
+                    user: user.clone(),
+                    password: self.encrypt_password(&password)?,
+                }),
+                ..Default::default()
             };
-
-            // println!("Testing MySQL connection to {}:{}...", host, port);
-
-            match MySQLTool::test_connection(&host, port, &user, &password) {
-                Ok(_) => {
-                    println!("✅ Doris connection successful!");
-                    return Ok((user, password));
+            // Try to run a simple query to test credentials
+            let test_result = MySQLTool::query_sql_with_config(&config, "SELECT 1");
+            match test_result {
+                Ok(_) => return Ok((user, password)),
+                Err(CliError::MySQLAccessDenied(_)) => {
+                    println!("Access denied for user. Please try again.");
                 }
-                Err(e) => {
-                    eprintln!("❌ {e}");
-
-                    let retry = Confirm::new()
-                        .with_prompt(
-                            "Connection failed. Would you like to re-enter the credentials?",
-                        )
-                        .default(true)
-                        .interact()?;
-
-                    if !retry {
-                        return Err(e);
-                    }
-                }
+                Err(e) => return Err(e),
+            }
+            if attempt == max_retries - 1 {
+                return Err(CliError::MySQLAccessDenied(
+                    "Maximum retries reached".to_string(),
+                ));
             }
         }
+        unreachable!()
     }
 
     pub fn encrypt_credentials(&self, user: &str, password: &str) -> Result<MySQLConfig> {
@@ -154,5 +140,28 @@ impl CredentialManager {
         combined.extend_from_slice(&nonce_bytes);
         combined.extend_from_slice(&ciphertext);
         Ok(general_purpose::STANDARD.encode(combined))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_encrypt_decrypt_password() {
+        let mgr = CredentialManager::new().unwrap();
+        let password = "test123!@#";
+        let encrypted = mgr.encrypt_password(password).unwrap();
+        let decrypted = mgr.decrypt_password(&encrypted).unwrap();
+        assert_eq!(password, decrypted);
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_empty_password() {
+        let mgr = CredentialManager::new().unwrap();
+        let password = "";
+        let encrypted = mgr.encrypt_password(password).unwrap();
+        let decrypted = mgr.decrypt_password(&encrypted).unwrap();
+        assert_eq!(password, decrypted);
     }
 }
