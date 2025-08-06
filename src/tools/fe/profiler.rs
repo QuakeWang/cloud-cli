@@ -17,7 +17,7 @@ impl FeProfilerTool {
             .with_prompt("Enter collection duration in seconds")
             .with_initial_text("10")
             .interact_text()
-            .map_err(|e| CliError::InvalidInput(format!("Duration input failed: {}", e)))?;
+            .map_err(|e| CliError::InvalidInput(format!("Duration input failed: {e}")))?;
 
         let duration_str = if input.trim().is_empty() {
             "10"
@@ -66,8 +66,7 @@ impl FeProfilerTool {
         executor::execute_command_with_timeout(&mut command, self.name(), config)?;
 
         let message = format!(
-            "Flame graph generated successfully (duration: {}s).",
-            duration
+            "Flame graph generated successfully (duration: {duration}s)."
         );
 
         Ok(ExecutionResult {
