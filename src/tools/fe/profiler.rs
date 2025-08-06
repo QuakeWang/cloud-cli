@@ -65,9 +65,7 @@ impl FeProfilerTool {
 
         executor::execute_command_with_timeout(&mut command, self.name(), config)?;
 
-        let message = format!(
-            "Flame graph generated successfully (duration: {duration}s)."
-        );
+        let message = format!("Flame graph generated successfully (duration: {duration}s).");
 
         Ok(ExecutionResult {
             output_path: std::path::PathBuf::new(),
