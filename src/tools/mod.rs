@@ -50,7 +50,7 @@ impl ToolRegistry {
             BeVarsTool, MemzGlobalTool, MemzTool, PipelineTasksTool, PstackTool,
         };
         use crate::tools::be::{JmapDumpTool as BeJmapDumpTool, JmapHistoTool as BeJmapHistoTool};
-        use crate::tools::fe::{JmapDumpTool, JmapHistoTool, JstackTool};
+        use crate::tools::fe::{FeProfilerTool, JmapDumpTool, JmapHistoTool, JstackTool};
 
         let mut registry = Self {
             fe_tools: Vec::new(),
@@ -61,6 +61,7 @@ impl ToolRegistry {
         registry.fe_tools.push(Box::new(JmapDumpTool));
         registry.fe_tools.push(Box::new(JmapHistoTool));
         registry.fe_tools.push(Box::new(JstackTool));
+        registry.fe_tools.push(Box::new(FeProfilerTool));
 
         // Register BE tools
         registry.be_tools.push(Box::new(PstackTool));
