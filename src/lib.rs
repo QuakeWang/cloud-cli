@@ -271,11 +271,13 @@ fn execute_tool_enhanced(config: &Config, tool: &dyn Tool, _service_name: &str) 
     match tool.execute(config, pid) {
         Ok(result) => {
             print_success(&result.message);
-            if result.output_path.to_str() != Some("console_output") {
-                print_info(&format!(
-                    "Output saved to: {}",
-                    result.output_path.display()
-                ));
+            if let Some(path) = result.output_path.to_str() {
+                if !path.is_empty() && path != "console_output" {
+                    print_info(&format!(
+                        "Output saved to: {}",
+                        result.output_path.display()
+                    ));
+                }
             }
             Ok(())
         }
