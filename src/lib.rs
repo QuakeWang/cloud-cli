@@ -34,39 +34,30 @@ pub fn run_cli() -> Result<()> {
         && Confirm::new()
             .with_prompt("MySQL credentials not detected. Configure now?")
             .default(true)
-            .interact()?
-    {
-        let mut success = false;
-        for _ in 0..3 {
-            match cred_mgr.prompt_credentials_with_connection_test() {
-                Ok((user, password)) => {
-                    let mysql_config = cred_mgr.encrypt_credentials(&user, &password)?;
-                    doris_config.mysql = Some(mysql_config);
-                    persist_configuration(&doris_config);
+            .interact()?{
+        match cred_mgr.prompt_credentials_with_connection_test() {
+            Ok((user, password)) => {
+                let mysql_config = cred_mgr.encrypt_credentials(&user, &password)?;
+                doris_config.mysql = Some(mysql_config);
+                persist_configuration(&doris_config);
 
-                    match tools::mysql::MySQLTool.query_cluster_info(&doris_config) {
-                        Ok(cluster_info) => {
-                            if let Err(e) = cluster_info.save_to_file() {
-                                ui::print_warning(&format!("Failed to save cluster info: {e}"));
-                            }
-                        }
-                        Err(e) => {
-                            ui::print_warning(&format!("Failed to collect cluster info: {e}"));
+                match tools::mysql::MySQLTool.query_cluster_info(&doris_config) {
+                    Ok(cluster_info) => {
+                        if let Err(e) = cluster_info.save_to_file() {
+                            ui::print_warning(&format!("Failed to save cluster info: {e}"));
                         }
                     }
-
-                    success = true;
-                    break;
-                }
-                Err(e) => {
-                    ui::print_warning(&format!("MySQL credential setup failed: {e}"));
+                    Err(e) => {
+                        ui::print_warning(&format!("Failed to collect cluster info: {e}"));
+                    }
                 }
             }
-        }
-        if !success {
-            ui::print_warning(
-                "MySQL credential setup failed after 3 attempts. You can configure it later in the settings.",
-            );
+            Err(e) => {
+                ui::print_warning(&format!("MySQL credential setup failed: {e}"));
+                ui::print_warning(
+                    "You can configure it later in the settings.",
+                );
+            }
         }
     }
 

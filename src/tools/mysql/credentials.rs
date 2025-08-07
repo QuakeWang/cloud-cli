@@ -5,7 +5,7 @@ use crate::tools::mysql::MySQLTool;
 use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use dialoguer::{Input, Password};
 use std::fs;
 use std::io::{Read, Write};
@@ -39,34 +39,46 @@ impl CredentialManager {
         Ok((user, password))
     }
 
+    /// Prompts for credentials and verifies them, handling passwordless scenarios.
     pub fn prompt_credentials_with_connection_test(&self) -> Result<(String, String)> {
         let max_retries = 3;
-        for attempt in 0..max_retries {
+        for _ in 0..max_retries {
             let (user, password) = self.prompt_for_credentials()?;
-            // Build a temporary DorisConfig for connection test
-            let config = DorisConfig {
-                mysql: Some(MySQLConfig {
-                    user: user.clone(),
-                    password: self.encrypt_password(&password)?,
-                }),
-                ..Default::default()
-            };
-            // Try to run a simple query to test credentials
-            let test_result = MySQLTool::query_sql_with_config(&config, "SELECT 1");
-            match test_result {
-                Ok(_) => return Ok((user, password)),
-                Err(CliError::MySQLAccessDenied(_)) => {
-                    println!("Access denied for user. Please try again.");
+
+            match self.test_connection(&user, &password) {
+                Ok(_) => {
+                    if password.is_empty() || self.test_connection(&user, "").is_err() {
+                        return Ok((user, password));
+                    } else {
+                        return Ok((user, "".to_string()));
+                    }
                 }
-                Err(e) => return Err(e),
-            }
-            if attempt == max_retries - 1 {
-                return Err(CliError::MySQLAccessDenied(
-                    "Maximum retries reached".to_string(),
-                ));
+                Err(CliError::MySQLAccessDenied(_)) => {
+                    crate::ui::print_error(
+                        "Access denied. Please check your password and try again.",
+                    );
+                }
+                Err(e) => {
+                    return Err(e);
+                }
             }
         }
-        unreachable!()
+
+        Err(CliError::MySQLAccessDenied(
+            "Maximum retries reached".to_string(),
+        ))
+    }
+
+    /// Helper function to test a MySQL connection with specific credentials.
+    fn test_connection(&self, user: &str, password: &str) -> Result<()> {
+        let config = DorisConfig {
+            mysql: Some(MySQLConfig {
+                user: user.to_string(),
+                password: self.encrypt_password(password)?,
+            }),
+            ..Default::default()
+        };
+        MySQLTool::query_sql_with_config(&config, "SELECT 1").map(|_| ())
     }
 
     pub fn encrypt_credentials(&self, user: &str, password: &str) -> Result<MySQLConfig> {
