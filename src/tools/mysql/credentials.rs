@@ -5,7 +5,7 @@ use crate::tools::mysql::MySQLTool;
 use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use dialoguer::{Input, Password};
 use std::fs;
 use std::io::{Read, Write};

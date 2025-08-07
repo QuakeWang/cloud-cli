@@ -34,7 +34,8 @@ pub fn run_cli() -> Result<()> {
         && Confirm::new()
             .with_prompt("MySQL credentials not detected. Configure now?")
             .default(true)
-            .interact()?{
+            .interact()?
+    {
         match cred_mgr.prompt_credentials_with_connection_test() {
             Ok((user, password)) => {
                 let mysql_config = cred_mgr.encrypt_credentials(&user, &password)?;
@@ -54,9 +55,7 @@ pub fn run_cli() -> Result<()> {
             }
             Err(e) => {
                 ui::print_warning(&format!("MySQL credential setup failed: {e}"));
-                ui::print_warning(
-                    "You can configure it later in the settings.",
-                );
+                ui::print_warning("You can configure it later in the settings.");
             }
         }
     }
