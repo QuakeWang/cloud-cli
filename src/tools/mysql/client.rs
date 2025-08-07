@@ -52,6 +52,10 @@ impl MySQLTool {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if stderr.contains("Access denied for user") || stderr.contains("ERROR 1045") {
                 return Err(CliError::MySQLAccessDenied(stderr.to_string()));
+            } else {
+                return Err(CliError::ToolExecutionFailed(format!(
+                    "mysql query failed: {stderr}"
+                )));
             }
         }
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -66,19 +70,23 @@ impl MySQLTool {
         query: &str,
     ) -> Result<std::process::Output> {
         let mut command = Command::new("mysql");
-        command.args([
-            "-h",
-            host,
-            "-P",
-            &port.to_string(),
-            "-u",
-            user,
-            &format!("-p{password}"),
-            "-A",
-            "-e",
-            query,
-        ]);
-        crate::executor::execute_command(&mut command, "mysql")
+        command.arg("-h").arg(host);
+        command.arg("-P").arg(port.to_string());
+        command.arg("-u").arg(user);
+
+        if !password.is_empty() {
+            command.arg(format!("-p{password}"));
+        }
+
+        command.arg("-A");
+        command.arg("-e").arg(query);
+
+        // Prevent mysql from prompting for a password interactively
+        command.stdin(std::process::Stdio::null());
+
+        command
+            .output()
+            .map_err(|e| CliError::ToolExecutionFailed(format!("Failed to execute mysql: {e}")))
     }
 
     /// Gets the connection parameters for MySQL, with a clear priority:
