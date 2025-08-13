@@ -210,10 +210,166 @@ fn collect_cluster_info_background(doris_config: &crate::config_loader::DorisCon
 
 /// Generic loop for handling a service type (FE or BE).
 fn handle_service_loop(config: &Config, service_name: &str, tools: &[Box<dyn Tool>]) -> Result<()> {
+    if service_name == "FE" {
+        handle_fe_service_loop(config, tools)
+    } else {
+        handle_be_service_loop(config, tools)
+    }
+}
+
+/// Handle FE service loop with nested menu structure
+fn handle_fe_service_loop(config: &Config, tools: &[Box<dyn Tool>]) -> Result<()> {
     loop {
-        match show_tool_selection_menu(2, &format!("Select {service_name} tool"), tools)? {
+        match ui::show_fe_tools_menu()? {
+            ui::FeToolAction::JmapDump => {
+                let tool = &*tools[0]; // jmap-dump
+                if let Err(e) = execute_tool_enhanced(config, tool, "FE") {
+                    match e {
+                        error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
+                        _ => print_error(&format!("Tool execution failed: {e}")),
+                    }
+                }
+                match ui::show_post_execution_menu(tool.name())? {
+                    ui::PostExecutionAction::Continue => continue,
+                    ui::PostExecutionAction::BackToMain => return Ok(()),
+                    ui::PostExecutionAction::Exit => {
+                        ui::print_goodbye();
+                        std::process::exit(0);
+                    }
+                }
+            }
+            ui::FeToolAction::JmapHisto => {
+                let tool = &*tools[1]; // jmap-histo
+                if let Err(e) = execute_tool_enhanced(config, tool, "FE") {
+                    match e {
+                        error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
+                        _ => print_error(&format!("Tool execution failed: {e}")),
+                    }
+                }
+                match ui::show_post_execution_menu(tool.name())? {
+                    ui::PostExecutionAction::Continue => continue,
+                    ui::PostExecutionAction::BackToMain => return Ok(()),
+                    ui::PostExecutionAction::Exit => {
+                        ui::print_goodbye();
+                        std::process::exit(0);
+                    }
+                }
+            }
+            ui::FeToolAction::Jstack => {
+                let tool = &*tools[2]; // jstack
+                if let Err(e) = execute_tool_enhanced(config, tool, "FE") {
+                    match e {
+                        error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
+                        _ => print_error(&format!("Tool execution failed: {e}")),
+                    }
+                }
+                match ui::show_post_execution_menu(tool.name())? {
+                    ui::PostExecutionAction::Continue => continue,
+                    ui::PostExecutionAction::BackToMain => return Ok(()),
+                    ui::PostExecutionAction::Exit => {
+                        ui::print_goodbye();
+                        std::process::exit(0);
+                    }
+                }
+            }
+            ui::FeToolAction::FeProfiler => {
+                let tool = &*tools[3]; // fe-profiler
+                if let Err(e) = execute_tool_enhanced(config, tool, "FE") {
+                    match e {
+                        error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
+                        _ => print_error(&format!("Tool execution failed: {e}")),
+                    }
+                }
+                match ui::show_post_execution_menu(tool.name())? {
+                    ui::PostExecutionAction::Continue => continue,
+                    ui::PostExecutionAction::BackToMain => return Ok(()),
+                    ui::PostExecutionAction::Exit => {
+                        ui::print_goodbye();
+                        std::process::exit(0);
+                    }
+                }
+            }
+            ui::FeToolAction::RoutineLoad => {
+                if let Err(e) = handle_routine_load_loop(config, tools) {
+                    match e {
+                        error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
+                        _ => print_error(&format!("Routine Load error: {e}")),
+                    }
+                }
+            }
+            ui::FeToolAction::Back => return Ok(()),
+        }
+    }
+}
+
+/// Handle Routine Load sub-menu loop
+fn handle_routine_load_loop(config: &Config, tools: &[Box<dyn Tool>]) -> Result<()> {
+    loop {
+        match ui::show_routine_load_menu()? {
+            ui::RoutineLoadAction::GetJobId => execute_routine_load_tool(
+                config,
+                tools,
+                crate::tools::fe::routine_load::RoutineLoadToolIndex::JobLister,
+            )?,
+            ui::RoutineLoadAction::ErrorCheck => execute_routine_load_tool(
+                config,
+                tools,
+                crate::tools::fe::routine_load::RoutineLoadToolIndex::ErrorChecker,
+            )?,
+            ui::RoutineLoadAction::Performance => execute_routine_load_tool(
+                config,
+                tools,
+                crate::tools::fe::routine_load::RoutineLoadToolIndex::PerformanceAnalyzer,
+            )?,
+            ui::RoutineLoadAction::Traffic => execute_routine_load_tool(
+                config,
+                tools,
+                crate::tools::fe::routine_load::RoutineLoadToolIndex::TrafficMonitor,
+            )?,
+            ui::RoutineLoadAction::Back => return Ok(()),
+        }
+    }
+}
+
+/// 执行 Routine Load 工具的辅助函数
+fn execute_routine_load_tool(
+    config: &Config,
+    tools: &[Box<dyn Tool>],
+    tool_index: crate::tools::fe::routine_load::RoutineLoadToolIndex,
+) -> Result<()> {
+    let tool = tool_index.get_tool(tools).ok_or_else(|| {
+        error::CliError::ToolExecutionFailed(format!(
+            "Tool not found at index {}",
+            tool_index as usize
+        ))
+    })?;
+
+    if let Err(e) = execute_tool_enhanced(config, tool, "FE") {
+        match e {
+            error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
+            _ => print_error(&format!("Tool execution failed: {e}")),
+        }
+        // For failed Routine Load tools, continue loop to show menu again
+        return Ok(());
+    }
+
+    // Only show post execution menu for successful execution
+    match ui::show_post_execution_menu(tool.name())? {
+        ui::PostExecutionAction::Continue => Ok(()),
+        ui::PostExecutionAction::BackToMain => Err(error::CliError::GracefulExit),
+        ui::PostExecutionAction::Exit => {
+            ui::print_goodbye();
+            std::process::exit(0);
+        }
+    }
+}
+
+/// Handle BE service loop (original logic)
+fn handle_be_service_loop(config: &Config, tools: &[Box<dyn Tool>]) -> Result<()> {
+    loop {
+        match show_tool_selection_menu(2, "Select BE tool", tools)? {
             Some(tool) => {
-                if let Err(e) = execute_tool_enhanced(config, tool, service_name) {
+                if let Err(e) = execute_tool_enhanced(config, tool, "BE") {
                     match e {
                         error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
                         _ => print_error(&format!("Tool execution failed: {e}")),
@@ -235,7 +391,7 @@ fn handle_service_loop(config: &Config, service_name: &str, tools: &[Box<dyn Too
 }
 
 /// Enhanced tool execution function that uses the new configuration system
-fn execute_tool_enhanced(config: &Config, tool: &dyn Tool, _service_name: &str) -> Result<()> {
+fn execute_tool_enhanced(config: &Config, tool: &dyn Tool, service_name: &str) -> Result<()> {
     let pid = if tool.requires_pid() {
         // Try to get PID from configuration first
         match config_loader::get_current_pid() {
@@ -274,10 +430,10 @@ fn execute_tool_enhanced(config: &Config, tool: &dyn Tool, _service_name: &str) 
         Err(error::CliError::GracefulExit) => Ok(()), // Simply return to the menu
         Err(e) => {
             // Handle the error and get the potentially updated config
-            match handle_tool_execution_error(config, &e)? {
+            match handle_tool_execution_error(config, &e, service_name, tool.name())? {
                 Some(updated_config) => {
                     // Try executing the tool again with the updated config
-                    execute_tool_enhanced(&updated_config, tool, _service_name)
+                    execute_tool_enhanced(&updated_config, tool, service_name)
                 }
                 None => Ok(()),
             }
@@ -285,99 +441,150 @@ fn execute_tool_enhanced(config: &Config, tool: &dyn Tool, _service_name: &str) 
     }
 }
 
-fn handle_tool_execution_error(config: &Config, error: &error::CliError) -> Result<Option<Config>> {
+fn handle_tool_execution_error(
+    config: &Config,
+    error: &error::CliError,
+    service_name: &str,
+    tool_name: &str,
+) -> Result<Option<Config>> {
     println!();
-    print_warning("Tool execution failed due to configuration issues.");
-    print_error(&format!("Error: {error}"));
 
-    println!();
-    print_info("Would you like to:");
+    // Special handling for Routine Load tools when Job ID is missing
+    if service_name == "FE"
+        && tool_name.contains("routine_load")
+        && error.to_string().contains("No Job ID in memory")
+    {
+        print_warning("Routine Load tool execution failed: No Job ID selected.");
+        print_error(&format!("Error: {error}"));
 
-    let options = vec![
-        "Fix JDK path and retry".to_string(),
-        "Fix output directory and retry".to_string(),
-        "Cancel and return to menu".to_string(),
-    ];
+        println!();
+        print_info("Would you like to:");
 
-    let selection = dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())
-        .with_prompt("Choose an option")
-        .items(&options)
-        .default(0)
-        .interact()
-        .map_err(|e| error::CliError::InvalidInput(format!("Error fix selection failed: {e}")))?;
+        let options = vec![
+            "Go to Get Job ID".to_string(),
+            "Return to Routine Load menu".to_string(),
+            "Cancel and return to menu".to_string(),
+        ];
 
-    match selection {
-        0 => {
-            // Fix JDK path
-            let new_path: String =
-                dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
-                    .with_prompt("Enter the correct JDK path")
-                    .with_initial_text(config.jdk_path.to_string_lossy().to_string())
-                    .interact_text()
-                    .map_err(|e| {
-                        error::CliError::InvalidInput(format!("JDK path input failed: {e}"))
-                    })?;
+        let selection = dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())
+            .with_prompt("Choose an option")
+            .items(&options)
+            .default(0)
+            .interact()
+            .map_err(|e| {
+                error::CliError::InvalidInput(format!("Error fix selection failed: {e}"))
+            })?;
 
-            let new_path = std::path::PathBuf::from(new_path);
-
-            // Validate the new path
-            if !new_path.exists() {
-                let path_display = new_path.display();
-                print_error(&format!("Path does not exist: {path_display}"));
-                return Ok(None);
+        match selection {
+            0 => {
+                // Signal to go to Get Job ID - this will be handled by the calling loop
+                Err(error::CliError::GracefulExit)
             }
-
-            let jmap_path = new_path.join("bin/jmap");
-            let jstack_path = new_path.join("bin/jstack");
-
-            if !jmap_path.exists() || !jstack_path.exists() {
-                print_error("Required JDK tools (jmap/jstack) not found in the specified path");
-                return Ok(None);
+            1 => {
+                // Signal to return to Routine Load menu
+                Err(error::CliError::GracefulExit)
             }
-
-            let fixed_config = config.clone().with_jdk_path(new_path);
-
-            // Persist the updated configuration
-            if let Err(e) = persist_updated_config(&fixed_config) {
-                print_warning(&format!("Failed to persist configuration: {e}"));
-            }
-
-            print_success("JDK path updated successfully!");
-            Ok(Some(fixed_config))
+            2 => Ok(None),
+            _ => Err(error::CliError::InvalidInput(
+                "Invalid selection".to_string(),
+            )),
         }
-        1 => {
-            // Fix output directory
-            let new_path: String =
-                dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
-                    .with_prompt("Enter the output directory path")
-                    .with_initial_text(config.output_dir.to_string_lossy().to_string())
-                    .interact_text()
-                    .map_err(|e| {
-                        error::CliError::InvalidInput(format!("Output dir input failed: {e}"))
-                    })?;
+    } else {
+        // Original generic error handling for other tools
+        print_warning("Tool execution failed due to configuration issues.");
+        print_error(&format!("Error: {error}"));
 
-            let new_path = std::path::PathBuf::from(new_path);
+        println!();
+        print_info("Would you like to:");
 
-            // Test creating the directory
-            if let Err(e) = std::fs::create_dir_all(&new_path) {
-                print_error(&format!("Cannot create directory: {e}"));
-                return Ok(None);
+        let options = vec![
+            "Fix JDK path and retry".to_string(),
+            "Fix output directory and retry".to_string(),
+            "Cancel and return to menu".to_string(),
+        ];
+
+        let selection = dialoguer::Select::with_theme(&dialoguer::theme::ColorfulTheme::default())
+            .with_prompt("Choose an option")
+            .items(&options)
+            .default(0)
+            .interact()
+            .map_err(|e| {
+                error::CliError::InvalidInput(format!("Error fix selection failed: {e}"))
+            })?;
+
+        match selection {
+            0 => {
+                // Fix JDK path
+                let new_path: String =
+                    dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
+                        .with_prompt("Enter the correct JDK path")
+                        .with_initial_text(config.jdk_path.to_string_lossy().to_string())
+                        .interact_text()
+                        .map_err(|e| {
+                            error::CliError::InvalidInput(format!("JDK path input failed: {e}"))
+                        })?;
+
+                let new_path = std::path::PathBuf::from(new_path);
+
+                // Validate the new path
+                if !new_path.exists() {
+                    let path_display = new_path.display();
+                    print_error(&format!("Path does not exist: {path_display}"));
+                    return Ok(None);
+                }
+
+                let jmap_path = new_path.join("bin/jmap");
+                let jstack_path = new_path.join("bin/jstack");
+
+                if !jmap_path.exists() || !jstack_path.exists() {
+                    print_error("Required JDK tools (jmap/jstack) not found in the specified path");
+                    return Ok(None);
+                }
+
+                let fixed_config = config.clone().with_jdk_path(new_path);
+
+                // Persist the updated configuration
+                if let Err(e) = persist_updated_config(&fixed_config) {
+                    print_warning(&format!("Failed to persist configuration: {e}"));
+                }
+
+                print_success("JDK path updated successfully!");
+                Ok(Some(fixed_config))
             }
+            1 => {
+                // Fix output directory
+                let new_path: String =
+                    dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
+                        .with_prompt("Enter the output directory path")
+                        .with_initial_text(config.output_dir.to_string_lossy().to_string())
+                        .interact_text()
+                        .map_err(|e| {
+                            error::CliError::InvalidInput(format!("Output dir input failed: {e}"))
+                        })?;
 
-            let fixed_config = config.clone().with_output_dir(new_path);
+                let new_path = std::path::PathBuf::from(new_path);
 
-            // Persist the updated configuration
-            if let Err(e) = persist_updated_config(&fixed_config) {
-                print_warning(&format!("Failed to persist configuration: {e}"));
+                // Test creating the directory
+                if let Err(e) = std::fs::create_dir_all(&new_path) {
+                    print_error(&format!("Cannot create directory: {e}"));
+                    return Ok(None);
+                }
+
+                let fixed_config = config.clone().with_output_dir(new_path);
+
+                // Persist the updated configuration
+                if let Err(e) = persist_updated_config(&fixed_config) {
+                    print_warning(&format!("Failed to persist configuration: {e}"));
+                }
+
+                print_success("Output directory updated successfully!");
+                Ok(Some(fixed_config))
             }
-
-            print_success("Output directory updated successfully!");
-            Ok(Some(fixed_config))
+            2 => Ok(None),
+            _ => Err(error::CliError::InvalidInput(
+                "Invalid selection".to_string(),
+            )),
         }
-        2 => Ok(None),
-        _ => Err(error::CliError::InvalidInput(
-            "Invalid selection".to_string(),
-        )),
     }
 }
 
