@@ -48,8 +48,8 @@ impl Config {
             self.output_dir = PathBuf::from(output_dir);
         }
 
-        if let Ok(timeout) = env::var(ENV_TIMEOUT) {
-            if let Ok(timeout) = timeout.parse::<u64>() {
+        if let Ok(timeout_str) = env::var(ENV_TIMEOUT) {
+            if let Ok(timeout) = timeout_str.parse::<u64>() {
                 self.timeout_seconds = timeout;
             }
         }
