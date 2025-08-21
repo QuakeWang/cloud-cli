@@ -6,9 +6,9 @@ use crate::error::{CliError, Result};
 use crate::tools::mysql::MySQLTool;
 use crate::tools::{ExecutionResult, Tool};
 use crate::ui;
+use crate::ui::{InputHelper, InteractiveSelector};
+use crate::ui::{NoJobsNextAction, show_no_jobs_recovery_menu, show_unknown_db_recovery_menu};
 use chrono::Utc;
-use console::{Key, Term, style};
-use dialoguer::Input;
 
 /// Routine Load Job Lister
 pub struct RoutineLoadJobLister;
@@ -27,39 +27,72 @@ impl Tool for RoutineLoadJobLister {
     }
 
     fn execute(&self, _config: &Config, _pid: u32) -> Result<ExecutionResult> {
-        let database = self.prompt_database_name()?;
-        let jobs = self.query_routine_load_jobs(&database)?;
-        self.display_jobs(&jobs)?;
-        let selected_job = self.prompt_job_selection(&jobs)?;
-        self.save_selected_job(selected_job, &database)?;
-        // 直接在终端输出关键信息，不再保存文件
-        let report = self.generate_selection_report(selected_job)?;
-        println!("\n{}", report);
-        Ok(ExecutionResult {
-            output_path: std::path::PathBuf::from("console_output"),
-            message: format!("Job ID '{}' selected and saved in memory", selected_job.id),
-        })
+        // Retry loop: allow reselecting database if no jobs found
+        let mut database = self.prompt_database_name()?;
+        loop {
+            match self.query_routine_load_jobs(&database) {
+                Ok(jobs) => {
+                    self.display_jobs(&jobs)?;
+                    let selected_job = self.prompt_job_selection(&jobs)?;
+                    self.save_selected_job(selected_job, &database)?;
+                    let report = self.generate_selection_report(selected_job)?;
+                    ui::print_info(&format!("\n{report}"));
+                    return Ok(ExecutionResult {
+                        output_path: std::path::PathBuf::from("console_output"),
+                        message: format!(
+                            "Job ID '{}' selected and saved in memory",
+                            selected_job.id
+                        ),
+                    });
+                }
+                Err(CliError::ToolExecutionFailed(msg))
+                    if msg.contains("No Routine Load jobs found in database") =>
+                {
+                    match show_no_jobs_recovery_menu(&database)? {
+                        NoJobsNextAction::ChooseAnotherDatabase => {
+                            database = self.prompt_database_name()?;
+                        }
+                        NoJobsNextAction::BackToMenu => return Err(CliError::GracefulExit),
+                    }
+                }
+                Err(CliError::ToolExecutionFailed(msg)) if msg.contains("Unknown database") => {
+                    match show_unknown_db_recovery_menu(&database)? {
+                        NoJobsNextAction::ChooseAnotherDatabase => {
+                            database = self.prompt_database_name()?;
+                        }
+                        NoJobsNextAction::BackToMenu => return Err(CliError::GracefulExit),
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
     }
 }
 
 impl RoutineLoadJobLister {
     fn prompt_database_name(&self) -> Result<String> {
-        ui::print_info("Please enter the database name:");
+        let doris_config = config_loader::load_config()?;
+        match MySQLTool::list_databases(&doris_config) {
+            Ok(output) => {
+                let dbs = output;
 
-        let database: String = Input::new()
-            .with_prompt("Database name")
-            .allow_empty(false)
-            .interact()?;
-
-        let database = database.trim().to_string();
-
-        if database.is_empty() {
-            return Err(CliError::InvalidInput(
-                "Database name cannot be empty".into(),
-            ));
+                if !dbs.is_empty() {
+                    ui::print_info("Select a database:");
+                    let selector =
+                        InteractiveSelector::new(dbs.clone(), "Available databases:".to_string())
+                            .with_page_size(30);
+                    if let Ok(selected) = selector.select() {
+                        return Ok(selected.clone());
+                    }
+                }
+            }
+            Err(_) => {
+                // Fallback to manual input
+            }
         }
 
-        Ok(database)
+        ui::print_info("Please enter the database name:");
+        InputHelper::prompt_non_empty("Database name")
     }
 
     fn query_routine_load_jobs(&self, database: &str) -> Result<Vec<RoutineLoadJob>> {
@@ -72,17 +105,8 @@ impl RoutineLoadJobLister {
         let jobs = job_manager.parse_routine_load_output(&output)?;
 
         if jobs.is_empty() {
-            ui::print_warning(&format!(
-                "No Routine Load jobs found in database '{}'",
-                database
-            ));
-            ui::print_info("This could mean:");
-            ui::print_info("  - The database name is incorrect");
-            ui::print_info("  - No Routine Load jobs have been created");
-            ui::print_info("  - All jobs have been stopped or deleted");
             return Err(CliError::ToolExecutionFailed(format!(
-                "No Routine Load jobs found in database '{}'",
-                database
+                "No Routine Load jobs found in database '{database}'"
             )));
         }
 
@@ -90,114 +114,40 @@ impl RoutineLoadJobLister {
     }
 
     fn display_jobs(&self, jobs: &[RoutineLoadJob]) -> Result<()> {
-        println!("\nRoutine Load Jobs in Database:");
-        println!("{}", "=".repeat(100));
+        ui::print_info("\nRoutine Load Jobs in Database:");
+        ui::print_info(&"=".repeat(100));
 
-        println!(
-            "{:<4} {:<20} {:<32} {:<12} {:<15}",
-            "No.", "Job ID", "Name", "State", "Table"
-        );
-        println!("{}", "-".repeat(100));
-
-        for (index, job) in jobs.iter().enumerate() {
-            let number = index + 1;
-            let name = self.truncate_string(&job.name, 32);
-            let table = self.truncate_string(&job.table_name, 13);
-
-            println!(
-                "{:<4} {:<20} {:<32} {:<12} {:<15}",
-                number, job.id, name, job.state, table
-            );
+        for job in jobs.iter() {
+            ui::print_info(&format!(
+                "ID: {} | Name: {} | State: {} | CreateTime: {}",
+                job.id, job.name, job.state, job.create_time
+            ));
         }
 
-        println!("{}", "=".repeat(100));
+        ui::print_info(&"-".repeat(100));
+        ui::print_info(&format!("Total jobs found: {count}", count = jobs.len()));
+        ui::print_info(&"=".repeat(100));
 
         let running_count = jobs.iter().filter(|j| j.state == "RUNNING").count();
         let paused_count = jobs.iter().filter(|j| j.state == "PAUSED").count();
         let stopped_count = jobs.iter().filter(|j| j.state == "STOPPED").count();
 
         println!(
-            "Summary: {} total jobs ({} running, {} paused, {} stopped)",
-            jobs.len(),
-            running_count,
-            paused_count,
-            stopped_count
+            "Summary: {} total jobs ({running_count} running, {paused_count} paused, {stopped_count} stopped)",
+            jobs.len()
         );
 
         Ok(())
     }
 
     fn prompt_job_selection<'a>(&self, jobs: &'a [RoutineLoadJob]) -> Result<&'a RoutineLoadJob> {
-        let term = Term::stdout();
-        let mut selection: usize = 0;
+        let selector =
+            InteractiveSelector::new(jobs.to_vec(), "Select a Routine Load job:".to_string());
+        let selected_job = selector.select()?;
 
-        println!("\nUse ↑/↓ or press number, then Enter to select:");
-        term.hide_cursor()
-            .map_err(|e| CliError::InvalidInput(e.to_string()))?;
-
-        self.render_selection_list(&term, jobs, selection)?;
-
-        loop {
-            match term
-                .read_key()
-                .map_err(|e| CliError::InvalidInput(e.to_string()))?
-            {
-                Key::Enter => {
-                    term.show_cursor()
-                        .map_err(|e| CliError::InvalidInput(e.to_string()))?;
-                    term.clear_last_lines(jobs.len()).ok();
-                    break;
-                }
-                Key::ArrowUp => {
-                    selection = if selection == 0 {
-                        jobs.len() - 1
-                    } else {
-                        selection - 1
-                    };
-                }
-                Key::ArrowDown => {
-                    selection = if selection + 1 >= jobs.len() {
-                        0
-                    } else {
-                        selection + 1
-                    };
-                }
-                Key::Char(c) => {
-                    if let Some(d) = c.to_digit(10) {
-                        let idx = d.saturating_sub(1) as usize;
-                        if idx < jobs.len() {
-                            selection = idx;
-                        }
-                    }
-                }
-                _ => {}
-            }
-
-            term.move_cursor_up(jobs.len()).ok();
-            self.render_selection_list(&term, jobs, selection)?;
-        }
-
-        Ok(&jobs[selection])
-    }
-
-    fn render_selection_list(
-        &self,
-        term: &Term,
-        jobs: &[RoutineLoadJob],
-        selection: usize,
-    ) -> Result<()> {
-        for (i, job) in jobs.iter().enumerate() {
-            let arrow = if i == selection {
-                style(">").cyan().bold().to_string()
-            } else {
-                " ".to_string()
-            };
-            let name = self.truncate_string(&job.name, 32);
-            let line = format!("{arrow} {}. {} - {} ({})", i + 1, job.id, name, job.state);
-            term.write_line(&line)
-                .map_err(|e| CliError::InvalidInput(e.to_string()))?;
-        }
-        Ok(())
+        jobs.iter()
+            .find(|j| j.id == selected_job.id)
+            .ok_or_else(|| CliError::InvalidInput("Selected job not found in original list".into()))
     }
 
     fn save_selected_job(&self, job: &RoutineLoadJob, database: &str) -> Result<()> {
@@ -254,13 +204,5 @@ impl RoutineLoadJobLister {
         ));
 
         Ok(report)
-    }
-
-    fn truncate_string(&self, s: &str, max_len: usize) -> String {
-        if s.len() <= max_len {
-            s.to_string()
-        } else {
-            format!("{}...", &s[..max_len - 3])
-        }
     }
 }

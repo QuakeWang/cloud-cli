@@ -14,7 +14,6 @@ static ROUTINE_LOAD_STATE: Lazy<Mutex<RoutineLoadState>> =
 pub struct RoutineLoadJobManager;
 
 impl RoutineLoadJobManager {
-    /// Helper function: safely acquire state lock and execute operation
     fn with_state<F, T>(&self, f: F) -> Result<T>
     where
         F: FnOnce(&mut RoutineLoadState) -> Result<T>,
@@ -25,7 +24,6 @@ impl RoutineLoadJobManager {
         f(&mut state)
     }
 
-    /// Helper function: read-only access to state
     fn with_state_readonly<F, T>(&self, f: F) -> Result<T>
     where
         F: FnOnce(&RoutineLoadState) -> Result<T>,
@@ -87,12 +85,10 @@ impl RoutineLoadJobManager {
         })
     }
 
-    /// Get job cache
     pub fn get_job_cache(&self) -> Result<HashMap<String, RoutineLoadJob>> {
         self.with_state_readonly(|state| Ok(state.job_cache.clone()))
     }
 
-    /// Parse Routine Load output
     pub fn parse_routine_load_output(&self, output: &str) -> Result<Vec<RoutineLoadJob>> {
         let blocks = split_into_blocks(output);
         let mut jobs = Vec::new();
@@ -106,7 +102,6 @@ impl RoutineLoadJobManager {
         Ok(jobs)
     }
 
-    /// Parse single job block
     fn parse_job_block(&self, block: &str) -> Result<Option<RoutineLoadJob>> {
         let fields = parse_key_value_pairs(block);
 
@@ -168,7 +163,6 @@ impl RoutineLoadJobManager {
         Ok(Some(job))
     }
 
-    /// Parse Statistic JSON field
     fn parse_statistic(&self, stat_str: &str) -> Result<JobStatistic> {
         let stat: serde_json::Value = serde_json::from_str(stat_str).map_err(|e| {
             CliError::ToolExecutionFailed(format!("Failed to parse statistic: {}", e))
@@ -188,7 +182,6 @@ impl RoutineLoadJobManager {
         })
     }
 
-    /// Parse Progress JSON field
     fn parse_progress(&self, prog_str: &str) -> Result<HashMap<String, String>> {
         let prog: HashMap<String, String> = serde_json::from_str(prog_str).map_err(|e| {
             CliError::ToolExecutionFailed(format!("Failed to parse progress: {}", e))
@@ -196,9 +189,8 @@ impl RoutineLoadJobManager {
         Ok(prog)
     }
 
-    /// Parse Lag JSON field
-    fn parse_lag(&self, lag_str: &str) -> Result<HashMap<String, u64>> {
-        let lag: HashMap<String, u64> = serde_json::from_str(lag_str)
+    fn parse_lag(&self, lag_str: &str) -> Result<HashMap<String, i64>> {
+        let lag: HashMap<String, i64> = serde_json::from_str(lag_str)
             .map_err(|e| CliError::ToolExecutionFailed(format!("Failed to parse lag: {e}")))?;
         Ok(lag)
     }

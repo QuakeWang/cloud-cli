@@ -1,4 +1,3 @@
-mod error_checker;
 mod job_lister;
 mod job_manager;
 mod log_parser;
@@ -6,7 +5,10 @@ mod models;
 mod performance_analyzer;
 mod traffic_monitor;
 
-pub use error_checker::RoutineLoadErrorChecker;
+pub mod messages {
+    pub const NO_JOB_ID: &str = "No Job ID in memory. Run 'Get Job ID' first.";
+}
+
 pub use job_lister::RoutineLoadJobLister;
 pub use job_manager::RoutineLoadJobManager;
 pub use models::*;
@@ -17,13 +19,11 @@ pub use traffic_monitor::RoutineLoadTrafficMonitor;
 #[derive(Debug, Clone, Copy)]
 pub enum RoutineLoadToolIndex {
     JobLister = 4,
-    ErrorChecker = 5,
-    PerformanceAnalyzer = 6,
-    TrafficMonitor = 7,
+    PerformanceAnalyzer = 5,
+    TrafficMonitor = 6,
 }
 
 impl RoutineLoadToolIndex {
-    /// Get tool instance
     pub fn get_tool(
         self,
         tools: &[Box<dyn crate::tools::Tool>],
@@ -36,7 +36,6 @@ impl RoutineLoadToolIndex {
 pub fn get_routine_load_tools() -> Vec<Box<dyn crate::tools::Tool>> {
     vec![
         Box::new(RoutineLoadJobLister),
-        Box::new(RoutineLoadErrorChecker),
         Box::new(RoutineLoadPerformanceAnalyzer),
         Box::new(RoutineLoadTrafficMonitor),
     ]

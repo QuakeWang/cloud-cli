@@ -2,10 +2,12 @@ use super::job_manager::RoutineLoadJobManager;
 use super::log_parser::{FeLogParser, LogCommitEntry, collect_fe_logs, scan_file};
 use crate::config::Config;
 use crate::error::{CliError, Result};
+use crate::tools::fe::routine_load::messages as ErrMsg;
 use crate::tools::{ExecutionResult, Tool};
 use crate::ui;
+use crate::ui::{FormatHelper, InputHelper};
 use chrono::Duration;
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 pub struct RoutineLoadPerformanceAnalyzer;
 
@@ -22,9 +24,9 @@ impl Tool for RoutineLoadPerformanceAnalyzer {
 
     fn execute(&self, _config: &Config, _pid: u32) -> Result<ExecutionResult> {
         let job_manager = RoutineLoadJobManager;
-        let job_id = job_manager.get_current_job_id().ok_or_else(|| {
-            CliError::InvalidInput("No Job ID in memory. Run 'Get Job ID' first.".into())
-        })?;
+        let job_id = job_manager
+            .get_current_job_id()
+            .ok_or_else(|| CliError::InvalidInput(ErrMsg::NO_JOB_ID.into()))?;
 
         let doris = crate::config_loader::load_config()?;
         let log_dir = doris.log_dir;
@@ -55,14 +57,7 @@ impl Tool for RoutineLoadPerformanceAnalyzer {
 
 impl RoutineLoadPerformanceAnalyzer {
     fn prompt_time_window(&self) -> Result<i64> {
-        let minutes_str: String = dialoguer::Input::new()
-            .with_prompt("Analyze recent minutes")
-            .default("30".to_string())
-            .interact_text()
-            .map_err(|e| CliError::InvalidInput(e.to_string()))?;
-
-        let minutes: i64 = minutes_str.trim().parse().unwrap_or(30).max(1);
-        Ok(minutes)
+        InputHelper::prompt_number_with_default("Analyze recent minutes", 30, 1)
     }
 
     fn collect_and_parse_logs(
@@ -106,69 +101,142 @@ impl RoutineLoadPerformanceAnalyzer {
         Ok(entries)
     }
 
-    /// Deduplicate entries
-    fn deduplicate_entries(&self, mut entries: Vec<LogCommitEntry>) -> Result<Vec<LogCommitEntry>> {
-        let mut seen: HashSet<String> = HashSet::new();
-        entries.retain(|e| {
-            let key = if let Some(txn) = &e.transaction_id {
-                format!("txn:{}", txn)
-            } else {
-                format!(
-                    "ts:{}|r:{}|b:{}|ms:{}",
-                    e.timestamp,
-                    e.loaded_rows.unwrap_or(0),
-                    e.received_bytes.unwrap_or(0),
-                    e.task_execution_ms.unwrap_or(0)
-                )
-            };
-            seen.insert(key)
-        });
+    fn deduplicate_entries(&self, entries: Vec<LogCommitEntry>) -> Result<Vec<LogCommitEntry>> {
+        let mut map: HashMap<String, LogCommitEntry> = HashMap::new();
 
-        if entries.is_empty() {
+        for e in entries.into_iter() {
+            let key = format!(
+                "ts:{}|r:{}|b:{}|ms:{}",
+                e.timestamp,
+                e.loaded_rows.unwrap_or(0),
+                e.received_bytes.unwrap_or(0),
+                e.task_execution_ms.unwrap_or(0)
+            );
+
+            match map.get_mut(&key) {
+                Some(existing) => {
+                    if existing.transaction_id.is_none() && e.transaction_id.is_some() {
+                        *existing = e;
+                    }
+                }
+                None => {
+                    map.insert(key, e);
+                }
+            }
+        }
+
+        let deduped: Vec<LogCommitEntry> = map.into_values().collect();
+        if deduped.is_empty() {
             return Err(CliError::ToolExecutionFailed(
                 "No matching commit entries found in FE logs".into(),
             ));
         }
-
-        Ok(entries)
+        Ok(deduped)
     }
 
-    /// Display performance analysis results
     fn display_performance_results(&self, entries: &[LogCommitEntry]) -> Result<()> {
-        println!("\nPer-commit stats (time | ms | loadedRows | receivedBytes | txnId)");
-        println!("{}", "-".repeat(90));
-
-        let mut stats = PerformanceStats::new();
-
-        // Sort by time in ascending order
+        // Collect rows
         let mut sorted_entries = entries.to_vec();
         sorted_entries.sort_by_key(|e| e.timestamp);
 
+        let headers = ["Time", "ms", "loadedRows", "receivedBytes", "txnId"];
+
+        let mut rows: Vec<[String; 5]> = Vec::with_capacity(sorted_entries.len());
+        let mut stats = PerformanceStats::new();
+
         for entry in &sorted_entries {
-            self.display_single_entry(entry);
+            let time_str = entry.timestamp.format("%H:%M:%S").to_string();
+            let ms = entry.task_execution_ms.unwrap_or(0);
+            let rows_val = entry.loaded_rows.unwrap_or(0);
+            let bytes_val = entry.received_bytes.unwrap_or(0);
+            let txn = entry.transaction_id.clone().unwrap_or_else(|| "-".into());
+
+            rows.push([
+                time_str,
+                ms.to_string(),
+                FormatHelper::fmt_int(rows_val),
+                FormatHelper::fmt_int(bytes_val),
+                txn,
+            ]);
             stats.update(entry);
         }
 
-        println!("{}", "-".repeat(90));
-        stats.display_summary();
+        // Compute column widths
+        let mut widths = [0usize; 5];
+        for i in 0..5 {
+            widths[i] = headers[i].len();
+        }
+        for row in &rows {
+            for i in 0..5 {
+                widths[i] = widths[i].max(row[i].len());
+            }
+        }
 
+        // Render table
+        ui::print_info("\nPer-commit stats");
+        self.print_table(&headers, &rows, &widths)?;
+
+        // Summary
+        stats.display_summary();
         Ok(())
     }
 
-    fn display_single_entry(&self, entry: &LogCommitEntry) {
-        let time_str = entry.timestamp.format("%H:%M:%S").to_string();
-        let ms = entry.task_execution_ms.unwrap_or(0);
-        let rows = entry.loaded_rows.unwrap_or(0);
-        let bytes = entry.received_bytes.unwrap_or(0);
+    fn print_table(
+        &self,
+        headers: &[&str; 5],
+        rows: &[[String; 5]],
+        widths: &[usize; 5],
+    ) -> Result<()> {
+        // Separator line
+        let sep = {
+            let mut s = String::new();
+            for (idx, w) in widths.iter().enumerate() {
+                if idx > 0 {
+                    s.push('+');
+                }
+                s.push_str(&"-".repeat(*w + 2));
+            }
+            s
+        };
 
-        println!(
-            "{} | {:>6} | {:>13} | {:>16} | {}",
-            time_str,
-            ms,
-            fmt_int(rows),
-            fmt_int(bytes),
-            entry.transaction_id.clone().unwrap_or_else(|| "-".into())
+        // Header
+        ui::print_info(&sep);
+        let header_line = format!(
+            " {:<w0$} | {:>w1$} | {:>w2$} | {:>w3$} | {:<w4$}",
+            headers[0],
+            headers[1],
+            headers[2],
+            headers[3],
+            headers[4],
+            w0 = widths[0],
+            w1 = widths[1],
+            w2 = widths[2],
+            w3 = widths[3],
+            w4 = widths[4]
         );
+        ui::print_info(&header_line);
+        ui::print_info(&sep);
+
+        // Rows
+        for row in rows {
+            let line = format!(
+                " {:<w0$} | {:>w1$} | {:>w2$} | {:>w3$} | {:<w4$}",
+                row[0],
+                row[1],
+                row[2],
+                row[3],
+                row[4],
+                w0 = widths[0],
+                w1 = widths[1],
+                w2 = widths[2],
+                w3 = widths[3],
+                w4 = widths[4]
+            );
+            ui::print_info(&line);
+        }
+        ui::print_info(&sep);
+
+        Ok(())
     }
 }
 
@@ -221,7 +289,7 @@ impl PerformanceStats {
 
     fn display_summary(&self) {
         if self.count > 0 {
-            println!(
+            ui::print_info(&format!(
                 "count={}  avg_ms={}  min_ms={}  max_ms={}",
                 self.count,
                 self.sum_ms / self.count as u128,
@@ -231,51 +299,27 @@ impl PerformanceStats {
                     self.min_ms
                 },
                 self.max_ms
-            );
-            println!(
+            ));
+            ui::print_info(&format!(
                 "          avg_rows={}  min_rows={}  max_rows={}",
-                fmt_int_u128(self.sum_rows / self.count as u128),
-                fmt_int(if self.min_rows == u64::MAX {
+                FormatHelper::fmt_int_u128(self.sum_rows / self.count as u128),
+                FormatHelper::fmt_int(if self.min_rows == u64::MAX {
                     0
                 } else {
                     self.min_rows
                 }),
-                fmt_int(self.max_rows)
-            );
-            println!(
+                FormatHelper::fmt_int(self.max_rows)
+            ));
+            ui::print_info(&format!(
                 "          avg_bytes={}  min_bytes={}  max_bytes={}",
-                fmt_int_u128(self.sum_bytes / self.count as u128),
-                fmt_int(if self.min_bytes == u64::MAX {
+                FormatHelper::fmt_int_u128(self.sum_bytes / self.count as u128),
+                FormatHelper::fmt_int(if self.min_bytes == u64::MAX {
                     0
                 } else {
                     self.min_bytes
                 }),
-                fmt_int(self.max_bytes)
-            );
+                FormatHelper::fmt_int(self.max_bytes)
+            ));
         }
     }
-}
-
-fn fmt_int(v: u64) -> String {
-    let s = v.to_string();
-    group_digits(&s)
-}
-
-fn fmt_int_u128(v: u128) -> String {
-    let s = v.to_string();
-    group_digits(&s)
-}
-
-fn group_digits(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let mut out = String::with_capacity(s.len() + s.len() / 3);
-    let mut count = 0;
-    for i in (0..bytes.len()).rev() {
-        out.push(bytes[i] as char);
-        count += 1;
-        if count % 3 == 0 && i != 0 {
-            out.push(',');
-        }
-    }
-    out.chars().rev().collect()
 }

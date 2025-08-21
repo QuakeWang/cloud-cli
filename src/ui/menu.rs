@@ -39,7 +39,9 @@ fn show_interactive_menu(step: u8, title: &str, items: &[String]) -> Result<usiz
     if step > 0 {
         print_step(step, title);
     } else if !title.is_empty() {
-        println!("{}", style(title).bold());
+        crate::ui::print_info(&format!("{title}", title = style(title).bold()));
+    } else {
+        ui::print_info("");
     }
 
     term.hide_cursor()?;
@@ -125,7 +127,6 @@ pub enum FeToolAction {
 #[derive(Debug, Clone, Copy)]
 pub enum RoutineLoadAction {
     GetJobId,
-    ErrorCheck,
     Performance,
     Traffic,
     Back,
@@ -219,26 +220,20 @@ pub fn show_routine_load_menu() -> Result<RoutineLoadAction> {
                 description: "List and select Routine Load jobs".to_string(),
             },
             MenuOption {
-                action: RoutineLoadAction::ErrorCheck,
-                key: "[2]".to_string(),
-                name: "Error Check".to_string(),
-                description: "Check for errors in selected Routine Load job".to_string(),
-            },
-            MenuOption {
                 action: RoutineLoadAction::Performance,
-                key: "[3]".to_string(),
+                key: "[2]".to_string(),
                 name: "Performance Analysis".to_string(),
                 description: "Analyze per-commit rows/bytes/time from FE logs".to_string(),
             },
             MenuOption {
                 action: RoutineLoadAction::Traffic,
-                key: "[4]".to_string(),
+                key: "[3]".to_string(),
                 name: "Traffic Monitor".to_string(),
                 description: "Aggregate per-minute loadedRows from FE logs".to_string(),
             },
             MenuOption {
                 action: RoutineLoadAction::Back,
-                key: "[5]".to_string(),
+                key: "[4]".to_string(),
                 name: "← Back to FE Tools".to_string(),
                 description: "Return to FE tools menu".to_string(),
             },

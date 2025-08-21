@@ -15,7 +15,7 @@ pub struct RoutineLoadJob {
     pub data_source_type: Option<String>,
     pub statistic: Option<JobStatistic>,
     pub progress: Option<HashMap<String, String>>,
-    pub lag: Option<HashMap<String, u64>>,
+    pub lag: Option<HashMap<String, i64>>,
     pub error_log_urls: Option<String>,
     pub other_msg: Option<String>,
 }

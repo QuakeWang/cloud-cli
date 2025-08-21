@@ -2,10 +2,11 @@ use super::job_manager::RoutineLoadJobManager;
 use super::log_parser::{FeLogParser, LogCommitEntry, collect_fe_logs, scan_file};
 use crate::config::Config;
 use crate::error::{CliError, Result};
+use crate::tools::fe::routine_load::messages as ErrMsg;
 use crate::tools::{ExecutionResult, Tool};
 use crate::ui;
+use crate::ui::InputHelper;
 use chrono::Duration;
-use dialoguer::Input;
 use std::collections::BTreeMap;
 
 pub struct RoutineLoadTrafficMonitor;
@@ -28,10 +29,10 @@ impl Tool for RoutineLoadTrafficMonitor {
         let minutes = self.prompt_time_window()?;
 
         ui::print_info(&format!(
-            "Analyzing traffic in {} for job {} (last {} min)...",
-            log_dir.display(),
-            job_id,
-            minutes
+            "Analyzing traffic in {log_dir} for job {job_id} (last {minutes} min)...",
+            log_dir = log_dir.display(),
+            job_id = job_id,
+            minutes = minutes
         ));
 
         let entries = self.collect_and_parse_logs(&log_dir, &job_id)?;
@@ -52,9 +53,9 @@ impl Tool for RoutineLoadTrafficMonitor {
 impl RoutineLoadTrafficMonitor {
     fn get_job_id(&self) -> Result<String> {
         let job_manager = RoutineLoadJobManager;
-        job_manager.get_current_job_id().ok_or_else(|| {
-            CliError::InvalidInput("No Job ID in memory. Run 'Get Job ID' first.".into())
-        })
+        job_manager
+            .get_current_job_id()
+            .ok_or_else(|| CliError::InvalidInput(ErrMsg::NO_JOB_ID.into()))
     }
 
     fn get_log_directory(&self) -> Result<std::path::PathBuf> {
@@ -63,14 +64,7 @@ impl RoutineLoadTrafficMonitor {
     }
 
     fn prompt_time_window(&self) -> Result<i64> {
-        let minutes_str: String = Input::new()
-            .with_prompt("Analyze recent minutes")
-            .default("60".to_string())
-            .interact_text()
-            .map_err(|e| CliError::InvalidInput(e.to_string()))?;
-
-        let minutes: i64 = minutes_str.trim().parse().unwrap_or(60).max(1);
-        Ok(minutes)
+        InputHelper::prompt_number_with_default("Analyze recent minutes", 60, 1)
     }
 
     fn collect_and_parse_logs(
@@ -126,24 +120,27 @@ impl RoutineLoadTrafficMonitor {
     }
 
     fn display_traffic_results(&self, per_minute_data: &BTreeMap<String, u128>) -> Result<()> {
-        println!("\nPer-minute loadedRows (ascending time)");
-        println!("{}", "-".repeat(40));
+        ui::print_info("\nPer-minute loadedRows (ascending time)");
+        ui::print_info(&"-".repeat(40));
 
         for (minute, rows) in per_minute_data.iter() {
-            println!("{minute} loadedRows={rows}");
+            ui::print_info(&format!("{minute} loadedRows={rows}"));
         }
 
         let total_rows: u128 = per_minute_data.values().sum();
+        ui::print_info(&"-".repeat(40));
+        ui::print_info(&format!(
+            "Total minutes: {count}",
+            count = per_minute_data.len()
+        ));
+        ui::print_info(&format!("Total loadedRows: {total_rows}"));
+
         let avg_rows = if !per_minute_data.is_empty() {
             total_rows / per_minute_data.len() as u128
         } else {
             0
         };
-
-        println!("{}", "-".repeat(40));
-        println!("Total minutes: {}", per_minute_data.len());
-        println!("Total loadedRows: {total_rows}");
-        println!("Average per minute: {avg_rows}");
+        ui::print_info(&format!("Average per minute: {avg_rows}"));
 
         Ok(())
     }

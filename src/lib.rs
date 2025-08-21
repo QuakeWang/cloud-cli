@@ -311,11 +311,7 @@ fn handle_routine_load_loop(config: &Config, tools: &[Box<dyn Tool>]) -> Result<
                 tools,
                 crate::tools::fe::routine_load::RoutineLoadToolIndex::JobLister,
             )?,
-            ui::RoutineLoadAction::ErrorCheck => execute_routine_load_tool(
-                config,
-                tools,
-                crate::tools::fe::routine_load::RoutineLoadToolIndex::ErrorChecker,
-            )?,
+
             ui::RoutineLoadAction::Performance => execute_routine_load_tool(
                 config,
                 tools,
@@ -447,7 +443,7 @@ fn handle_tool_execution_error(
     service_name: &str,
     tool_name: &str,
 ) -> Result<Option<Config>> {
-    println!();
+    print_info("");
 
     // Special handling for Routine Load tools when Job ID is missing
     if service_name == "FE"
@@ -457,7 +453,7 @@ fn handle_tool_execution_error(
         print_warning("Routine Load tool execution failed: No Job ID selected.");
         print_error(&format!("Error: {error}"));
 
-        println!();
+        print_info("");
         print_info("Would you like to:");
 
         let options = vec![
@@ -494,7 +490,7 @@ fn handle_tool_execution_error(
         print_warning("Tool execution failed due to configuration issues.");
         print_error(&format!("Error: {error}"));
 
-        println!();
+        print_info("");
         print_info("Would you like to:");
 
         let options = vec![

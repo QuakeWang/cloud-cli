@@ -114,16 +114,16 @@ pub fn scan_file(
     out: &mut Vec<LogCommitEntry>,
 ) -> Result<()> {
     let f = fs::File::open(path).map_err(CliError::IoError)?;
-    
+
     let reader = BufReader::new(f);
-    
+
     for line_result in reader.lines() {
         let line = line_result.map_err(CliError::IoError)?;
-        
+
         if let Some(entry) = parser.parse_line(&line, job_id) {
             out.push(entry);
         }
     }
-    
+
     Ok(())
 }
