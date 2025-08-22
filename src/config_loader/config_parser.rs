@@ -182,17 +182,17 @@ fn parse_config_content(
             continue;
         }
 
-        if line.starts_with(LOG_DIR_KEY) {
-            if let Some(log_dir) = extract_value(line) {
-                match install_dir {
-                    Some(install) if log_dir.contains("${DORIS_HOME}") => {
-                        let replaced =
-                            log_dir.replace("${DORIS_HOME}", install.to_str().unwrap_or(""));
-                        config.log_dir = PathBuf::from(replaced);
-                    }
-                    _ => {
-                        config.log_dir = PathBuf::from(log_dir);
-                    }
+        if line.starts_with(LOG_DIR_KEY)
+            && let Some(log_dir) = extract_value(line)
+        {
+            match install_dir {
+                Some(install) if log_dir.contains("${DORIS_HOME}") => {
+                    let replaced =
+                        log_dir.replace("${DORIS_HOME}", install.to_str().unwrap_or(""));
+                    config.log_dir = PathBuf::from(replaced);
+                }
+                _ => {
+                    config.log_dir = PathBuf::from(log_dir);
                 }
             }
         }
