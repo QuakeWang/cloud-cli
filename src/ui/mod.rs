@@ -1,8 +1,14 @@
 use console::{Term, style};
 
+pub mod dialogs;
 pub mod menu;
+pub mod selector;
+pub mod utils;
 
+pub use dialogs::*;
 pub use menu::*;
+pub use selector::*;
+pub use utils::*;
 
 pub static SUCCESS: &str = "[+] ";
 pub static ERROR: &str = "[!] ";

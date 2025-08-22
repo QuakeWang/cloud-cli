@@ -16,12 +16,12 @@ pub fn save_toml_to_file<T: serde::Serialize>(obj: &T, file_path: &Path) -> Resu
 
 /// Ensures that the directory for a given path exists, creating it if necessary.
 pub fn ensure_dir_exists(path: &Path) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            fs::create_dir_all(parent).map_err(|e| {
-                crate::error::CliError::ConfigError(format!("Failed to create directory: {e}"))
-            })?;
-        }
+    if let Some(parent) = path.parent()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent).map_err(|e| {
+            crate::error::CliError::ConfigError(format!("Failed to create directory: {e}"))
+        })?;
     }
     Ok(())
 }

@@ -48,10 +48,11 @@ impl Config {
             self.output_dir = PathBuf::from(output_dir);
         }
 
-        if let Ok(timeout) = env::var(ENV_TIMEOUT) {
-            if let Ok(timeout) = timeout.parse::<u64>() {
-                self.timeout_seconds = timeout;
-            }
+        if let Some(timeout) = env::var(ENV_TIMEOUT)
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+        {
+            self.timeout_seconds = timeout;
         }
 
         self.no_progress_animation = env::var(ENV_NO_PROGRESS)

@@ -39,7 +39,9 @@ fn show_interactive_menu(step: u8, title: &str, items: &[String]) -> Result<usiz
     if step > 0 {
         print_step(step, title);
     } else if !title.is_empty() {
-        println!("{}", style(title).bold());
+        crate::ui::print_info(&format!("{title}", title = style(title).bold()));
+    } else {
+        ui::print_info("");
     }
 
     term.hide_cursor()?;
@@ -112,6 +114,24 @@ pub enum MainMenuAction {
     Exit,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum FeToolAction {
+    JmapDump,
+    JmapHisto,
+    Jstack,
+    FeProfiler,
+    RoutineLoad,
+    Back,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum RoutineLoadAction {
+    GetJobId,
+    Performance,
+    Traffic,
+    Back,
+}
+
 pub fn show_main_menu() -> Result<MainMenuAction> {
     let menu = Menu {
         step: 1,
@@ -134,6 +154,88 @@ pub fn show_main_menu() -> Result<MainMenuAction> {
                 key: "[3]".to_string(),
                 name: "Exit".to_string(),
                 description: "Exit the application".to_string(),
+            },
+        ],
+    };
+    menu.show()
+}
+
+pub fn show_fe_tools_menu() -> Result<FeToolAction> {
+    let menu = Menu {
+        step: 2,
+        title: "Select FE tool".to_string(),
+        options: vec![
+            MenuOption {
+                action: FeToolAction::JmapDump,
+                key: "[1]".to_string(),
+                name: "jmap-dump".to_string(),
+                description: "Generate heap dump (.hprof)".to_string(),
+            },
+            MenuOption {
+                action: FeToolAction::JmapHisto,
+                key: "[2]".to_string(),
+                name: "jmap-histo".to_string(),
+                description: "Generate histogram (.log)".to_string(),
+            },
+            MenuOption {
+                action: FeToolAction::Jstack,
+                key: "[3]".to_string(),
+                name: "jstack".to_string(),
+                description: "Generate thread stack trace (.log)".to_string(),
+            },
+            MenuOption {
+                action: FeToolAction::FeProfiler,
+                key: "[4]".to_string(),
+                name: "fe-profiler".to_string(),
+                description:
+                    "Generate flame graph for FE performance analysis using async-profiler"
+                        .to_string(),
+            },
+            MenuOption {
+                action: FeToolAction::RoutineLoad,
+                key: "[5]".to_string(),
+                name: "Routine Load".to_string(),
+                description: "Routine Load management tools".to_string(),
+            },
+            MenuOption {
+                action: FeToolAction::Back,
+                key: "[6]".to_string(),
+                name: "← Back".to_string(),
+                description: "Return to main menu".to_string(),
+            },
+        ],
+    };
+    menu.show()
+}
+
+pub fn show_routine_load_menu() -> Result<RoutineLoadAction> {
+    let menu = Menu {
+        step: 3,
+        title: "Routine Load Tools".to_string(),
+        options: vec![
+            MenuOption {
+                action: RoutineLoadAction::GetJobId,
+                key: "[1]".to_string(),
+                name: "Get Job ID".to_string(),
+                description: "List and select Routine Load jobs".to_string(),
+            },
+            MenuOption {
+                action: RoutineLoadAction::Performance,
+                key: "[2]".to_string(),
+                name: "Performance Analysis".to_string(),
+                description: "Analyze per-commit rows/bytes/time from FE logs".to_string(),
+            },
+            MenuOption {
+                action: RoutineLoadAction::Traffic,
+                key: "[3]".to_string(),
+                name: "Traffic Monitor".to_string(),
+                description: "Aggregate per-minute loadedRows from FE logs".to_string(),
+            },
+            MenuOption {
+                action: RoutineLoadAction::Back,
+                key: "[4]".to_string(),
+                name: "← Back to FE Tools".to_string(),
+                description: "Return to FE tools menu".to_string(),
             },
         ],
     };

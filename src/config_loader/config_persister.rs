@@ -434,10 +434,10 @@ pub fn load_persisted_config() -> Result<DorisConfig> {
                         return Ok(from_persistent_config(persistent_config));
                     }
                     Err(e) => {
-                        if e.to_string().contains("missing field `process`") {
-                            if let Some(config) = migrate_legacy_config(&content, &config_path) {
-                                return Ok(config);
-                            }
+                        if e.to_string().contains("missing field `process`")
+                            && migrate_legacy_config(&content, &config_path).is_some()
+                        {
+                            return Ok(migrate_legacy_config(&content, &config_path).unwrap());
                         }
 
                         last_error = Some(CliError::ConfigError(format!(

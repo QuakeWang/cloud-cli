@@ -89,12 +89,12 @@ fn detect_process_detailed(env: Environment) -> Result<ProcessDetectionResult> {
 pub fn get_process_command(pid: u32) -> Result<String> {
     // Try /proc/PID/cmdline on Linux (most direct and reliable when available)
     let proc_cmdline = Path::new("/proc").join(pid.to_string()).join("cmdline");
-    if proc_cmdline.exists() {
-        if let Ok(content) = std::fs::read_to_string(&proc_cmdline) {
-            let command = content.replace('\0', " ").trim().to_string();
-            if !command.is_empty() {
-                return Ok(command);
-            }
+    if proc_cmdline.exists()
+        && let Ok(content) = std::fs::read_to_string(&proc_cmdline)
+    {
+        let command = content.replace('\0', " ").trim().to_string();
+        if !command.is_empty() {
+            return Ok(command);
         }
     }
 
@@ -104,14 +104,12 @@ pub fn get_process_command(pid: u32) -> Result<String> {
         if let Ok(output) = Command::new("ps")
             .args(["-p", &pid.to_string(), "-o", format])
             .output()
+            && output.status.success()
+            && let Ok(s) = String::from_utf8(output.stdout)
         {
-            if output.status.success() {
-                if let Ok(s) = String::from_utf8(output.stdout) {
-                    let cmd = s.trim().to_string();
-                    if !cmd.is_empty() {
-                        return Ok(cmd);
-                    }
-                }
+            let cmd = s.trim().to_string();
+            if !cmd.is_empty() {
+                return Ok(cmd);
             }
         }
     }
@@ -195,12 +193,17 @@ pub fn get_paths(env: Environment) -> Result<(PathBuf, PathBuf)> {
 /// Get paths by PID for the specified environment
 fn get_paths_by_pid(pid: u32) -> (PathBuf, PathBuf) {
     let grep_pattern = "DORIS_HOME|JAVA_HOME";
-    if let Ok(environ) = read_proc_environ_by_pid(pid, grep_pattern) {
-        if let Some(doris_home) = regex_utils::extract_env_var(&environ, "DORIS_HOME") {
-            let java_home = regex_utils::extract_env_var(&environ, "JAVA_HOME")
-                .unwrap_or_else(|| "/opt/jdk".to_string());
-            return (PathBuf::from(doris_home), PathBuf::from(java_home));
-        }
+    if let Some((doris_home, java_home)) = read_proc_environ_by_pid(pid, grep_pattern)
+        .ok()
+        .and_then(|envs| {
+            regex_utils::extract_env_var(&envs, "DORIS_HOME").map(|home| {
+                let java_home = regex_utils::extract_env_var(&envs, "JAVA_HOME")
+                    .unwrap_or_else(|| "/opt/jdk".to_string());
+                (home, java_home)
+            })
+        })
+    {
+        return (PathBuf::from(doris_home), PathBuf::from(java_home));
     }
 
     // Default paths if environment variables are not available
@@ -241,18 +244,18 @@ pub fn detect_mixed_deployment(config: &mut crate::config_loader::DorisConfig) -
             config.fe_process_command = Some(fe_process.command.clone());
             config.fe_install_dir = Some(fe_process.doris_home.clone());
 
-            if config.environment != crate::config_loader::Environment::FE {
-                if let Ok(fe_config) = crate::config_loader::config_parser::parse_config_from_path(
+            if config.environment != crate::config_loader::Environment::FE
+                && let Ok(fe_config) = crate::config_loader::config_parser::parse_config_from_path(
                     crate::config_loader::Environment::FE,
                     &fe_process.doris_home,
-                ) {
-                    config.http_port = fe_config.http_port;
-                    config.rpc_port = fe_config.rpc_port;
-                    config.query_port = fe_config.query_port;
-                    config.edit_log_port = fe_config.edit_log_port;
-                    config.cloud_http_port = fe_config.cloud_http_port;
-                    config.meta_dir = fe_config.meta_dir;
-                }
+                )
+            {
+                config.http_port = fe_config.http_port;
+                config.rpc_port = fe_config.rpc_port;
+                config.query_port = fe_config.query_port;
+                config.edit_log_port = fe_config.edit_log_port;
+                config.cloud_http_port = fe_config.cloud_http_port;
+                config.meta_dir = fe_config.meta_dir;
             }
         }
 
@@ -261,16 +264,16 @@ pub fn detect_mixed_deployment(config: &mut crate::config_loader::DorisConfig) -
             config.be_process_command = Some(be_process.command.clone());
             config.be_install_dir = Some(be_process.doris_home.clone());
 
-            if config.environment != crate::config_loader::Environment::BE {
-                if let Ok(be_config) = crate::config_loader::config_parser::parse_config_from_path(
+            if config.environment != crate::config_loader::Environment::BE
+                && let Ok(be_config) = crate::config_loader::config_parser::parse_config_from_path(
                     crate::config_loader::Environment::BE,
                     &be_process.doris_home,
-                ) {
-                    config.be_port = be_config.be_port;
-                    config.brpc_port = be_config.brpc_port;
-                    config.webserver_port = be_config.webserver_port;
-                    config.heartbeat_service_port = be_config.heartbeat_service_port;
-                }
+                )
+            {
+                config.be_port = be_config.be_port;
+                config.brpc_port = be_config.brpc_port;
+                config.webserver_port = be_config.webserver_port;
+                config.heartbeat_service_port = be_config.heartbeat_service_port;
             }
         }
     }

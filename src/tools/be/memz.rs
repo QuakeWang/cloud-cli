@@ -134,31 +134,34 @@ fn extract_memory_metrics(html_content: &str) -> (String, String) {
     let mut thread_cache = "Unknown".to_string();
     let mut dirty_pages = "Unknown".to_string();
 
-    if let Some(caps) = re.captures(html_content) {
-        if caps.len() > 6 {
-            if let Some(bytes) = caps.get(1).and_then(|m| m.as_str().parse::<u64>().ok()) {
-                allocated = format_bytes(bytes);
-            }
+    if re
+        .captures(html_content)
+        .map(|caps| caps.len() > 6)
+        .unwrap_or(false)
+    {
+        let caps = re.captures(html_content).unwrap();
+        if let Some(bytes) = caps.get(1).and_then(|m| m.as_str().parse::<u64>().ok()) {
+            allocated = format_bytes(bytes);
+        }
 
-            if let Some(bytes) = caps.get(2).and_then(|m| m.as_str().parse::<u64>().ok()) {
-                active = format_bytes(bytes);
-            }
+        if let Some(bytes) = caps.get(2).and_then(|m| m.as_str().parse::<u64>().ok()) {
+            active = format_bytes(bytes);
+        }
 
-            if let Some(bytes) = caps.get(3).and_then(|m| m.as_str().parse::<u64>().ok()) {
-                metadata = format_bytes(bytes);
-            }
+        if let Some(bytes) = caps.get(3).and_then(|m| m.as_str().parse::<u64>().ok()) {
+            metadata = format_bytes(bytes);
+        }
 
-            if let Some(bytes) = caps.get(4).and_then(|m| m.as_str().parse::<u64>().ok()) {
-                resident = format_bytes(bytes);
-            }
+        if let Some(bytes) = caps.get(4).and_then(|m| m.as_str().parse::<u64>().ok()) {
+            resident = format_bytes(bytes);
+        }
 
-            if let Some(bytes) = caps.get(5).and_then(|m| m.as_str().parse::<u64>().ok()) {
-                mapped = format_bytes(bytes);
-            }
+        if let Some(bytes) = caps.get(5).and_then(|m| m.as_str().parse::<u64>().ok()) {
+            mapped = format_bytes(bytes);
+        }
 
-            if let Some(bytes) = caps.get(6).and_then(|m| m.as_str().parse::<u64>().ok()) {
-                retained = format_bytes(bytes);
-            }
+        if let Some(bytes) = caps.get(6).and_then(|m| m.as_str().parse::<u64>().ok()) {
+            retained = format_bytes(bytes);
         }
     }
 
