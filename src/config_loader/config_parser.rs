@@ -187,8 +187,7 @@ fn parse_config_content(
         {
             match install_dir {
                 Some(install) if log_dir.contains("${DORIS_HOME}") => {
-                    let replaced =
-                        log_dir.replace("${DORIS_HOME}", install.to_str().unwrap_or(""));
+                    let replaced = log_dir.replace("${DORIS_HOME}", install.to_str().unwrap_or(""));
                     config.log_dir = PathBuf::from(replaced);
                 }
                 _ => {
