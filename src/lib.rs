@@ -413,13 +413,16 @@ fn execute_tool_enhanced(config: &Config, tool: &dyn Tool, service_name: &str) -
     match tool.execute(config, pid) {
         Ok(result) => {
             print_success(&result.message);
-            if let Some(path) = result.output_path.to_str() {
-                if !path.is_empty() && path != "console_output" {
-                    print_info(&format!(
-                        "Output saved to: {}",
-                        result.output_path.display()
-                    ));
-                }
+            if result
+                .output_path
+                .to_str()
+                .filter(|p| !p.is_empty() && *p != "console_output")
+                .is_some()
+            {
+                print_info(&format!(
+                    "Output saved to: {}",
+                    result.output_path.display()
+                ));
             }
             Ok(())
         }

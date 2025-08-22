@@ -184,16 +184,15 @@ fn parse_config_content(
 
         if line.starts_with(LOG_DIR_KEY) {
             if let Some(log_dir) = extract_value(line) {
-                if let Some(install) = install_dir {
-                    if log_dir.contains("${DORIS_HOME}") {
+                match install_dir {
+                    Some(install) if log_dir.contains("${DORIS_HOME}") => {
                         let replaced =
                             log_dir.replace("${DORIS_HOME}", install.to_str().unwrap_or(""));
                         config.log_dir = PathBuf::from(replaced);
-                    } else {
+                    }
+                    _ => {
                         config.log_dir = PathBuf::from(log_dir);
                     }
-                } else {
-                    config.log_dir = PathBuf::from(log_dir);
                 }
             }
         }
@@ -260,10 +259,10 @@ fn parse_path_key_value(line: &str, key: &str, value: &mut Option<PathBuf>) -> R
 
 /// Generic key-value parser
 fn parse_key_value<T: FromStr>(line: &str, key: &str, value: &mut Option<T>) -> Result<()> {
-    if let Some(val_str) = regex_utils::extract_key_value(line, key) {
-        if let Ok(parsed_val) = val_str.parse::<T>() {
-            *value = Some(parsed_val);
-        }
+    if let Some(parsed_val) =
+        regex_utils::extract_key_value(line, key).and_then(|s| s.parse::<T>().ok())
+    {
+        *value = Some(parsed_val);
     }
     Ok(())
 }

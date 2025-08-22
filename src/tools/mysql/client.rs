@@ -172,11 +172,12 @@ impl MySQLTool {
 
     /// Gets the connection parameters for MySQL, with a clear priority:
     pub fn get_connection_params() -> Result<(String, u16)> {
-        if let (Ok(host), Ok(port_str)) = (std::env::var("MYSQL_HOST"), std::env::var("MYSQL_PORT"))
+        if let Some((host, port)) = std::env::var("MYSQL_HOST")
+            .ok()
+            .and_then(|h| std::env::var("MYSQL_PORT").ok().map(|p| (h, p)))
+            .and_then(|(h, p_str)| p_str.parse::<u16>().ok().map(|p| (h, p)))
         {
-            if let Ok(port) = port_str.parse::<u16>() {
-                return Ok((host, port));
-            }
+            return Ok((host, port));
         }
 
         let config = crate::config_loader::load_config()?;

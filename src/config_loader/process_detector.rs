@@ -195,12 +195,17 @@ pub fn get_paths(env: Environment) -> Result<(PathBuf, PathBuf)> {
 /// Get paths by PID for the specified environment
 fn get_paths_by_pid(pid: u32) -> (PathBuf, PathBuf) {
     let grep_pattern = "DORIS_HOME|JAVA_HOME";
-    if let Ok(environ) = read_proc_environ_by_pid(pid, grep_pattern) {
-        if let Some(doris_home) = regex_utils::extract_env_var(&environ, "DORIS_HOME") {
-            let java_home = regex_utils::extract_env_var(&environ, "JAVA_HOME")
-                .unwrap_or_else(|| "/opt/jdk".to_string());
-            return (PathBuf::from(doris_home), PathBuf::from(java_home));
-        }
+    if let Some((doris_home, java_home)) = read_proc_environ_by_pid(pid, grep_pattern)
+        .ok()
+        .and_then(|envs| {
+            regex_utils::extract_env_var(&envs, "DORIS_HOME").map(|home| {
+                let java_home = regex_utils::extract_env_var(&envs, "JAVA_HOME")
+                    .unwrap_or_else(|| "/opt/jdk".to_string());
+                (home, java_home)
+            })
+        })
+    {
+        return (PathBuf::from(doris_home), PathBuf::from(java_home));
     }
 
     // Default paths if environment variables are not available
