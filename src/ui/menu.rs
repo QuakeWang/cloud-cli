@@ -194,7 +194,7 @@ pub fn show_fe_tools_menu() -> Result<FeToolAction> {
             MenuOption {
                 action: FeToolAction::RoutineLoad,
                 key: "[5]".to_string(),
-                name: "Routine Load".to_string(),
+                name: "routine-load".to_string(),
                 description: "Routine Load management tools".to_string(),
             },
             MenuOption {
