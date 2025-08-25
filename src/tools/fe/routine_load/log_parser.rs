@@ -3,7 +3,7 @@ use chrono::NaiveDateTime;
 use regex::Regex;
 use std::fs;
 use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Debug, Clone, Default)]
 pub struct LogCommitEntry {
@@ -64,47 +64,6 @@ impl FeLogParser {
 
         Some(entry)
     }
-}
-
-pub fn collect_fe_logs(dir: &Path) -> Result<Vec<PathBuf>> {
-    if !dir.exists() {
-        return Err(CliError::ConfigError(format!(
-            "Log directory does not exist: {}",
-            dir.display()
-        )));
-    }
-
-    if !dir.is_dir() {
-        return Err(CliError::ConfigError(format!(
-            "Path is not a directory: {}",
-            dir.display()
-        )));
-    }
-
-    let mut files: Vec<PathBuf> = fs::read_dir(dir)
-        .map_err(CliError::IoError)?
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .filter(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .map(|s| s.starts_with("fe.log"))
-                .unwrap_or(false)
-        })
-        .collect();
-
-    if files.is_empty() {
-        return Err(CliError::ConfigError(format!(
-            "No fe.log files found in directory: {}",
-            dir.display()
-        )));
-    }
-
-    // Sort by modification time (newest first)
-    files.sort_by_key(|p| fs::metadata(p).and_then(|m| m.modified()).ok());
-    files.reverse();
-
-    Ok(files)
 }
 
 pub fn scan_file(

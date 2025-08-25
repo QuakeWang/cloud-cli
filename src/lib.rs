@@ -327,7 +327,6 @@ fn handle_routine_load_loop(config: &Config, tools: &[Box<dyn Tool>]) -> Result<
     }
 }
 
-/// 执行 Routine Load 工具的辅助函数
 fn execute_routine_load_tool(
     config: &Config,
     tools: &[Box<dyn Tool>],

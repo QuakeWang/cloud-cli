@@ -1,6 +1,6 @@
 use crate::error::Result;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// A generic utility to serialize a struct to a TOML file.
 pub fn save_toml_to_file<T: serde::Serialize>(obj: &T, file_path: &Path) -> Result<()> {
@@ -41,4 +41,57 @@ pub fn get_user_config_dir() -> Result<std::path::PathBuf> {
 pub fn read_file_content(path: &Path) -> Result<String> {
     fs::read_to_string(path)
         .map_err(|e| crate::error::CliError::ConfigError(format!("Failed to read file: {e}")))
+}
+
+pub fn collect_log_files(dir: &Path, log_prefix: &str) -> Result<Vec<PathBuf>> {
+    if !dir.exists() {
+        return Err(crate::error::CliError::ConfigError(format!(
+            "Log directory does not exist: {}",
+            dir.display()
+        )));
+    }
+
+    if !dir.is_dir() {
+        return Err(crate::error::CliError::ConfigError(format!(
+            "Path is not a directory: {}",
+            dir.display()
+        )));
+    }
+
+    let mut files: Vec<PathBuf> = fs::read_dir(dir)
+        .map_err(crate::error::CliError::IoError)?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            // Only accept log files with the specified prefix and exclude compressed archives
+            name.starts_with(log_prefix)
+                && !name.ends_with(".gz")
+                && !name.ends_with(".zip")
+                && !name.ends_with(".tar")
+                && !name.ends_with(".tar.gz")
+        })
+        .collect();
+
+    if files.is_empty() {
+        return Err(crate::error::CliError::ConfigError(format!(
+            "No {} files found in directory: {}",
+            log_prefix,
+            dir.display()
+        )));
+    }
+
+    // Sort by modification time (newest first)
+    files.sort_by_key(|p| fs::metadata(p).and_then(|m| m.modified()).ok());
+    files.reverse();
+
+    Ok(files)
+}
+
+pub fn collect_fe_logs(dir: &Path) -> Result<Vec<PathBuf>> {
+    collect_log_files(dir, "fe.log")
+}
+
+pub fn collect_be_logs(dir: &Path) -> Result<Vec<PathBuf>> {
+    collect_log_files(dir, "be.INFO")
 }

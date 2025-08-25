@@ -1,13 +1,15 @@
+use chrono::Duration;
+use std::collections::BTreeMap;
+
 use super::job_manager::RoutineLoadJobManager;
-use super::log_parser::{FeLogParser, LogCommitEntry, collect_fe_logs, scan_file};
+use super::log_parser::{FeLogParser, LogCommitEntry, scan_file};
 use crate::config::Config;
 use crate::error::{CliError, Result};
+use crate::tools::common::fs_utils;
 use crate::tools::fe::routine_load::messages as ErrMsg;
 use crate::tools::{ExecutionResult, Tool};
 use crate::ui;
 use crate::ui::InputHelper;
-use chrono::Duration;
-use std::collections::BTreeMap;
 
 pub struct RoutineLoadTrafficMonitor;
 
@@ -72,7 +74,7 @@ impl RoutineLoadTrafficMonitor {
         log_dir: &std::path::Path,
         job_id: &str,
     ) -> Result<Vec<LogCommitEntry>> {
-        let files = collect_fe_logs(log_dir)?;
+        let files = fs_utils::collect_fe_logs(log_dir)?;
         let parser = FeLogParser::new();
         let mut entries: Vec<LogCommitEntry> = Vec::new();
 
