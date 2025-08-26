@@ -38,7 +38,8 @@ impl<T> InteractiveSelector<T> {
         let mut selection: usize = 0;
         let mut last_drawn_lines: usize;
 
-        crate::ui::print_info(&format!("\n{title}", title = self.title));
+        crate::ui::print_info("");
+        crate::ui::print_info(&self.title.to_string());
         crate::ui::print_info("Use ↑/↓ move, ←/→ page, 1-9 jump, Enter to select:");
 
         term.hide_cursor()

@@ -1,13 +1,19 @@
 use console::{Term, style};
 
 pub mod dialogs;
+pub mod error_handlers;
 pub mod menu;
 pub mod selector;
+pub mod service_handlers;
+pub mod tool_executor;
 pub mod utils;
 
 pub use dialogs::*;
+pub use error_handlers::*;
 pub use menu::*;
 pub use selector::*;
+pub use service_handlers::*;
+pub use tool_executor::*;
 pub use utils::*;
 
 pub static SUCCESS: &str = "[+] ";

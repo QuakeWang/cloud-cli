@@ -122,7 +122,8 @@ impl RoutineLoadTrafficMonitor {
     }
 
     fn display_traffic_results(&self, per_minute_data: &BTreeMap<String, u128>) -> Result<()> {
-        ui::print_info("\nPer-minute loadedRows (ascending time)");
+        ui::print_info("");
+        ui::print_info("Per-minute loadedRows (ascending time)");
         ui::print_info(&"-".repeat(40));
 
         for (minute, rows) in per_minute_data.iter() {

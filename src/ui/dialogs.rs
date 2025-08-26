@@ -10,8 +10,9 @@ pub enum NoJobsNextAction {
 }
 
 pub fn show_no_jobs_recovery_menu(database: &str) -> Result<NoJobsNextAction> {
+    ui::print_info("");
     ui::print_warning(&format!(
-        "\n[!] No Routine Load jobs found in database '{database}'"
+        "No Routine Load jobs found in database '{database}'"
     ));
     ui::print_info("This could mean:");
     ui::print_info("  - The database name is incorrect");
@@ -35,7 +36,8 @@ pub fn show_no_jobs_recovery_menu(database: &str) -> Result<NoJobsNextAction> {
 }
 
 pub fn show_unknown_db_recovery_menu(database: &str) -> Result<NoJobsNextAction> {
-    ui::print_warning(&format!("\n[!] Unknown database '{database}'"));
+    ui::print_info("");
+    ui::print_warning(&format!("Unknown database '{database}'"));
     ui::print_info("Please verify the database name or choose another one.");
 
     let options = vec!["Choose another database", "Back to Routine Load menu"];
@@ -53,4 +55,24 @@ pub fn show_unknown_db_recovery_menu(database: &str) -> Result<NoJobsNextAction>
     };
 
     Ok(action)
+}
+
+// Generic prompt helpers for reuse across UI modules
+pub fn select_index(prompt: &str, options: &[&str]) -> Result<usize> {
+    let selection = Select::new()
+        .with_prompt(prompt)
+        .items(options)
+        .default(0)
+        .interact()
+        .map_err(|e| CliError::InvalidInput(e.to_string()))?;
+    Ok(selection)
+}
+
+pub fn input_text(prompt: &str, initial: &str) -> Result<String> {
+    let text = dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
+        .with_prompt(prompt)
+        .with_initial_text(initial.to_string())
+        .interact_text()
+        .map_err(|e| CliError::InvalidInput(e.to_string()))?;
+    Ok(text)
 }
