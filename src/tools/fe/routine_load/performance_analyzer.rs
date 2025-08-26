@@ -174,11 +174,10 @@ impl RoutineLoadPerformanceAnalyzer {
             }
         }
 
-        // Render table
-        ui::print_info("\nPer-commit stats");
+        ui::print_info("");
+        ui::print_info("Per-commit stats");
         self.print_table(&headers, &rows, &widths)?;
 
-        // Summary
         stats.display_summary();
         Ok(())
     }

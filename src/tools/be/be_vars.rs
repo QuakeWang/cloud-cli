@@ -53,7 +53,6 @@ fn prompt_for_variable_name() -> Result<String> {
 
     if input.trim().is_empty() {
         ui::print_warning("Variable name cannot be empty!");
-        ui::print_info("Hint: e.g., tablet_map_shard_size, or just 'shard' to search.");
         Ok("".to_string())
     } else {
         Ok(input)

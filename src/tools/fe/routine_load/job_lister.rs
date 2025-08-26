@@ -36,7 +36,8 @@ impl Tool for RoutineLoadJobLister {
                     let selected_job = self.prompt_job_selection(&jobs)?;
                     self.save_selected_job(selected_job, &database)?;
                     let report = self.generate_selection_report(selected_job)?;
-                    ui::print_info(&format!("\n{report}"));
+                    ui::print_info("");
+                    ui::print_info(&report);
                     return Ok(ExecutionResult {
                         output_path: std::path::PathBuf::from("console_output"),
                         message: format!(
@@ -114,7 +115,8 @@ impl RoutineLoadJobLister {
     }
 
     fn display_jobs(&self, jobs: &[RoutineLoadJob]) -> Result<()> {
-        ui::print_info("\nRoutine Load Jobs in Database:");
+        ui::print_info("");
+        ui::print_info("Routine Load Jobs in Database:");
         ui::print_info(&"=".repeat(100));
 
         for job in jobs.iter() {
