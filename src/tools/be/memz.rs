@@ -1,6 +1,7 @@
 use super::be_http_client;
 use crate::config::Config;
 use crate::error::Result;
+use crate::tools::common::format_utils;
 use crate::tools::{ExecutionResult, Tool};
 use crate::ui;
 use chrono::Utc;
@@ -102,23 +103,6 @@ impl Tool for MemzGlobalTool {
     }
 }
 
-/// Format bytes to a human-readable string
-fn format_bytes(bytes: u64) -> String {
-    const KB: u64 = 1024;
-    const MB: u64 = KB * 1024;
-    const GB: u64 = MB * 1024;
-
-    if bytes >= GB {
-        format!("{:.2} GB ({bytes} bytes)", bytes as f64 / GB as f64)
-    } else if bytes >= MB {
-        format!("{:.2} MB ({bytes} bytes)", bytes as f64 / MB as f64)
-    } else if bytes >= KB {
-        format!("{:.2} KB ({bytes} bytes)", bytes as f64 / KB as f64)
-    } else {
-        format!("{bytes} bytes")
-    }
-}
-
 /// Extract memory metrics from the HTML response
 fn extract_memory_metrics(html_content: &str) -> (String, String) {
     let re = Regex::new(r"Allocated: (\d+), active: (\d+), metadata: (\d+).*?, resident: (\d+), mapped: (\d+), retained: (\d+)").unwrap();
@@ -141,27 +125,27 @@ fn extract_memory_metrics(html_content: &str) -> (String, String) {
     {
         let caps = re.captures(html_content).unwrap();
         if let Some(bytes) = caps.get(1).and_then(|m| m.as_str().parse::<u64>().ok()) {
-            allocated = format_bytes(bytes);
+            allocated = format_utils::format_bytes(bytes, 2, true);
         }
 
         if let Some(bytes) = caps.get(2).and_then(|m| m.as_str().parse::<u64>().ok()) {
-            active = format_bytes(bytes);
+            active = format_utils::format_bytes(bytes, 2, true);
         }
 
         if let Some(bytes) = caps.get(3).and_then(|m| m.as_str().parse::<u64>().ok()) {
-            metadata = format_bytes(bytes);
+            metadata = format_utils::format_bytes(bytes, 2, true);
         }
 
         if let Some(bytes) = caps.get(4).and_then(|m| m.as_str().parse::<u64>().ok()) {
-            resident = format_bytes(bytes);
+            resident = format_utils::format_bytes(bytes, 2, true);
         }
 
         if let Some(bytes) = caps.get(5).and_then(|m| m.as_str().parse::<u64>().ok()) {
-            mapped = format_bytes(bytes);
+            mapped = format_utils::format_bytes(bytes, 2, true);
         }
 
         if let Some(bytes) = caps.get(6).and_then(|m| m.as_str().parse::<u64>().ok()) {
-            retained = format_bytes(bytes);
+            retained = format_utils::format_bytes(bytes, 2, true);
         }
     }
 
@@ -170,7 +154,7 @@ fn extract_memory_metrics(html_content: &str) -> (String, String) {
         .and_then(|caps| caps.get(1))
         .and_then(|m| m.as_str().parse::<u64>().ok())
     {
-        thread_cache = format_bytes(bytes);
+        thread_cache = format_utils::format_bytes(bytes, 2, true);
     }
 
     if let Some(bytes) = dirty_pages_re
@@ -178,7 +162,7 @@ fn extract_memory_metrics(html_content: &str) -> (String, String) {
         .and_then(|caps| caps.get(1))
         .and_then(|m| m.as_str().parse::<u64>().ok())
     {
-        dirty_pages = format_bytes(bytes);
+        dirty_pages = format_utils::format_bytes(bytes, 2, true);
     }
 
     let table = format!(
