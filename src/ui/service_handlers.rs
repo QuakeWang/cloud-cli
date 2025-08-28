@@ -88,6 +88,11 @@ pub fn handle_fe_service_loop(config: &Config, tools: &[Box<dyn Tool>]) -> Resul
                     }
                 }
             }
+            crate::ui::FeToolAction::TableInfo => {
+                if let Err(e) = crate::tools::fe::table_info::browser::run_interactive(config) {
+                    print_error(&format!("Table info browse failed: {e}"));
+                }
+            }
             crate::ui::FeToolAction::RoutineLoad => {
                 if let Err(e) = handle_routine_load_loop(config, tools) {
                     match e {

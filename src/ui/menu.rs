@@ -120,6 +120,7 @@ pub enum FeToolAction {
     JmapHisto,
     Jstack,
     FeProfiler,
+    TableInfo,
     RoutineLoad,
     Back,
 }
@@ -192,14 +193,20 @@ pub fn show_fe_tools_menu() -> Result<FeToolAction> {
                         .to_string(),
             },
             MenuOption {
-                action: FeToolAction::RoutineLoad,
+                action: FeToolAction::TableInfo,
                 key: "[5]".to_string(),
+                name: "table-info".to_string(),
+                description: "Collect table info for a selected table".to_string(),
+            },
+            MenuOption {
+                action: FeToolAction::RoutineLoad,
+                key: "[6]".to_string(),
                 name: "routine-load".to_string(),
                 description: "Routine Load management tools".to_string(),
             },
             MenuOption {
                 action: FeToolAction::Back,
-                key: "[6]".to_string(),
+                key: "[7]".to_string(),
                 name: "← Back".to_string(),
                 description: "Return to main menu".to_string(),
             },
