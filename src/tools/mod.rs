@@ -10,9 +10,7 @@ use std::path::PathBuf;
 /// Result of executing a tool
 #[derive(Debug)]
 pub struct ExecutionResult {
-    /// Path to the generated output file
     pub output_path: PathBuf,
-    /// Success message describing the operation
     pub message: String,
 }
 
@@ -25,7 +23,6 @@ pub trait Tool {
     fn execute(&self, config: &Config, pid: u32) -> Result<ExecutionResult>;
 
     /// Indicates whether the tool requires a process PID to execute.
-    /// Most tools do, so the default is true.
     fn requires_pid(&self) -> bool {
         true
     }
@@ -47,11 +44,13 @@ impl ToolRegistry {
     /// Creates a new tool registry with all available tools
     pub fn new() -> Self {
         use crate::tools::be::{
-            BeVarsTool, MemzGlobalTool, MemzTool, PipelineTasksTool, PstackTool,
+            BeListTool, BeVarsTool, MemzGlobalTool, MemzTool, PipelineTasksTool, PstackTool,
         };
         use crate::tools::be::{JmapDumpTool as BeJmapDumpTool, JmapHistoTool as BeJmapHistoTool};
         use crate::tools::fe::routine_load::get_routine_load_tools;
-        use crate::tools::fe::{FeProfilerTool, JmapDumpTool, JmapHistoTool, JstackTool};
+        use crate::tools::fe::{
+            FeListTool, FeProfilerTool, JmapDumpTool, JmapHistoTool, JstackTool,
+        };
 
         let mut registry = Self {
             fe_tools: Vec::new(),
@@ -59,6 +58,7 @@ impl ToolRegistry {
         };
 
         // Register FE tools
+        registry.fe_tools.push(Box::new(FeListTool));
         registry.fe_tools.push(Box::new(JmapDumpTool));
         registry.fe_tools.push(Box::new(JmapHistoTool));
         registry.fe_tools.push(Box::new(JstackTool));
@@ -68,6 +68,7 @@ impl ToolRegistry {
         registry.fe_tools.extend(get_routine_load_tools());
 
         // Register BE tools
+        registry.be_tools.push(Box::new(BeListTool));
         registry.be_tools.push(Box::new(PstackTool));
         registry.be_tools.push(Box::new(BeVarsTool));
         registry.be_tools.push(Box::new(BeJmapDumpTool));

@@ -84,7 +84,10 @@ fn show_interactive_menu(step: u8, title: &str, items: &[String]) -> Result<usiz
                 if let Some(digit) = c.to_digit(10) {
                     let index = (digit as usize).saturating_sub(1);
                     if index < items.len() {
-                        selection = index;
+                        // 数字键选择后立即返回，避免 selection 被意外修改
+                        term.show_cursor()?;
+                        term.clear_last_lines(items.len())?;
+                        return Ok(index);
                     }
                 }
             }
@@ -116,6 +119,7 @@ pub enum MainMenuAction {
 
 #[derive(Debug, Clone, Copy)]
 pub enum FeToolAction {
+    FeList,
     JmapDump,
     JmapHisto,
     Jstack,
@@ -167,26 +171,32 @@ pub fn show_fe_tools_menu() -> Result<FeToolAction> {
         title: "Select FE tool".to_string(),
         options: vec![
             MenuOption {
-                action: FeToolAction::JmapDump,
+                action: FeToolAction::FeList,
                 key: "[1]".to_string(),
+                name: "fe-list".to_string(),
+                description: "List and select FE host (IP)".to_string(),
+            },
+            MenuOption {
+                action: FeToolAction::JmapDump,
+                key: "[2]".to_string(),
                 name: "jmap-dump".to_string(),
                 description: "Generate heap dump (.hprof)".to_string(),
             },
             MenuOption {
                 action: FeToolAction::JmapHisto,
-                key: "[2]".to_string(),
+                key: "[3]".to_string(),
                 name: "jmap-histo".to_string(),
                 description: "Generate histogram (.log)".to_string(),
             },
             MenuOption {
                 action: FeToolAction::Jstack,
-                key: "[3]".to_string(),
+                key: "[4]".to_string(),
                 name: "jstack".to_string(),
                 description: "Generate thread stack trace (.log)".to_string(),
             },
             MenuOption {
                 action: FeToolAction::FeProfiler,
-                key: "[4]".to_string(),
+                key: "[5]".to_string(),
                 name: "fe-profiler".to_string(),
                 description:
                     "Generate flame graph for FE performance analysis using async-profiler"
@@ -194,19 +204,19 @@ pub fn show_fe_tools_menu() -> Result<FeToolAction> {
             },
             MenuOption {
                 action: FeToolAction::TableInfo,
-                key: "[5]".to_string(),
+                key: "[6]".to_string(),
                 name: "table-info".to_string(),
                 description: "Collect table info for a selected table".to_string(),
             },
             MenuOption {
                 action: FeToolAction::RoutineLoad,
-                key: "[6]".to_string(),
+                key: "[7]".to_string(),
                 name: "routine-load".to_string(),
                 description: "Routine Load management tools".to_string(),
             },
             MenuOption {
                 action: FeToolAction::Back,
-                key: "[7]".to_string(),
+                key: "[8]".to_string(),
                 name: "← Back".to_string(),
                 description: "Return to main menu".to_string(),
             },

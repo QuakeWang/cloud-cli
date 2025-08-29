@@ -18,9 +18,9 @@ pub use traffic_monitor::RoutineLoadTrafficMonitor;
 /// Routine Load tool index enum to avoid hardcoded indices
 #[derive(Debug, Clone, Copy)]
 pub enum RoutineLoadToolIndex {
-    JobLister = 4,
-    PerformanceAnalyzer = 5,
-    TrafficMonitor = 6,
+    JobLister = 5,
+    PerformanceAnalyzer = 6,
+    TrafficMonitor = 7,
 }
 
 impl RoutineLoadToolIndex {

@@ -138,7 +138,6 @@ impl Backend {
     }
 
     /// Parse Tag information and extract cloud cluster information
-    /// This is a private helper method specifically for Backend Tag field parsing
     fn parse_tag_info(tag_str: &str) -> Option<String> {
         if tag_str.is_empty() || tag_str == "{}" {
             return None;
@@ -192,6 +191,24 @@ pub struct ClusterInfo {
 }
 
 impl ClusterInfo {
+    pub fn load_from_file() -> Result<Self> {
+        let config_dir = fs_utils::get_user_config_dir()?;
+        let file_path = config_dir.join("clusters.toml");
+        let content = fs_utils::read_file_content(&file_path)?;
+        let info: ClusterInfo = toml::from_str(&content).map_err(|e| {
+            crate::error::CliError::ConfigError(format!("Failed to parse clusters.toml: {e}"))
+        })?;
+        Ok(info)
+    }
+
+    pub fn list_be_hosts(&self) -> Vec<String> {
+        self.backends
+            .iter()
+            .filter(|b| b.alive)
+            .map(|b| b.host.clone())
+            .collect()
+    }
+
     pub fn save_to_file(&self) -> Result<PathBuf> {
         self.validate()?;
         let config_dir = fs_utils::get_user_config_dir()?;
