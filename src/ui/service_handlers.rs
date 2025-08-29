@@ -20,8 +20,17 @@ pub fn handle_service_loop(
 pub fn handle_fe_service_loop(config: &Config, tools: &[Box<dyn Tool>]) -> Result<()> {
     loop {
         match crate::ui::show_fe_tools_menu()? {
+            crate::ui::FeToolAction::FeList => {
+                let tool = &*tools[0];
+                if let Err(e) = crate::execute_tool_enhanced(config, tool, "FE") {
+                    match e {
+                        error::CliError::GracefulExit => {}
+                        _ => print_error(&format!("Tool execution failed: {e}")),
+                    }
+                }
+            }
             crate::ui::FeToolAction::JmapDump => {
-                let tool = &*tools[0]; // jmap-dump
+                let tool = &*tools[1];
                 if let Err(e) = crate::execute_tool_enhanced(config, tool, "FE") {
                     match e {
                         error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
@@ -38,7 +47,7 @@ pub fn handle_fe_service_loop(config: &Config, tools: &[Box<dyn Tool>]) -> Resul
                 }
             }
             crate::ui::FeToolAction::JmapHisto => {
-                let tool = &*tools[1]; // jmap-histo
+                let tool = &*tools[2];
                 if let Err(e) = crate::execute_tool_enhanced(config, tool, "FE") {
                     match e {
                         error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
@@ -55,7 +64,7 @@ pub fn handle_fe_service_loop(config: &Config, tools: &[Box<dyn Tool>]) -> Resul
                 }
             }
             crate::ui::FeToolAction::Jstack => {
-                let tool = &*tools[2]; // jstack
+                let tool = &*tools[3];
                 if let Err(e) = crate::execute_tool_enhanced(config, tool, "FE") {
                     match e {
                         error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
@@ -72,7 +81,7 @@ pub fn handle_fe_service_loop(config: &Config, tools: &[Box<dyn Tool>]) -> Resul
                 }
             }
             crate::ui::FeToolAction::FeProfiler => {
-                let tool = &*tools[3]; // fe-profiler
+                let tool = &*tools[4];
                 if let Err(e) = crate::execute_tool_enhanced(config, tool, "FE") {
                     match e {
                         error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
