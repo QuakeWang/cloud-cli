@@ -18,7 +18,7 @@ pub fn run_interactive(config: &crate::config::Config) -> Result<()> {
                     let total = FeTableInfoTool::list_tables(config, Some(&db_name))?.len();
                     let conc = FeTableInfoTool::suggest_concurrency(total);
                     let reports = FeTableInfoTool::collect_all_in_db(config, &db_name, conc)?;
-                    if let Ok(files) = save_reports_txt(config, &reports, false) {
+                    if let Ok(files) = save_reports_txt(config, &reports, SaveMode::PerDatabase) {
                         for f in files {
                             print_info(&format!("Saved: {}", f.display()));
                         }
@@ -36,7 +36,7 @@ pub fn run_interactive(config: &crate::config::Config) -> Result<()> {
                 };
                 print_info(&format!("Found {} tables, starting...", all_tables.len()));
                 let reports = FeTableInfoTool::collect_many(config, &all_tables, conc)?;
-                if let Ok(files) = save_reports_txt(config, &reports, true) {
+                if let Ok(files) = save_reports_txt(config, &reports, SaveMode::SingleFile) {
                     print_info(&format!("Saved: {}", files[0].display()));
                 }
                 render_batch_summary("<all_dbs>", reports.len());
@@ -189,7 +189,13 @@ fn generate_report_content(report: &super::TableInfoReport) -> String {
         report
             .indexes
             .iter()
-            .map(|i| format!("{}({})", i.name, i.index_type))
+            .map(|i| {
+                if i.name.contains('(') {
+                    i.name.clone()
+                } else {
+                    format!("{}({})", i.name, i.index_type)
+                }
+            })
             .collect::<Vec<_>>()
             .join(", ")
     };
@@ -298,37 +304,60 @@ fn prompt_next_action() -> Result<NextAction> {
     }
 }
 
+#[derive(Debug, Clone)]
+enum SaveMode {
+    SingleFile,
+    PerDatabase,
+}
+
 fn save_reports_txt(
     config: &crate::config::Config,
     reports: &[super::TableInfoReport],
-    single_file: bool,
+    mode: SaveMode,
 ) -> anyhow::Result<Vec<PathBuf>> {
     let base_dir: PathBuf = config.output_dir.join("table-info");
     config.ensure_output_dir()?;
 
-    if single_file {
-        let file_path = base_dir.join("all_databases_table_info.txt");
-        crate::tools::common::fs_utils::ensure_dir_exists(&file_path)?;
-        let mut content = String::new();
-        for r in reports {
-            content.push_str(&generate_report_content(r));
-            content.push('\n');
-            content.push_str(&"-".repeat(80));
-            content.push('\n');
-        }
-        fs::write(&file_path, content)?;
-        Ok(vec![file_path])
-    } else {
-        let mut files: Vec<PathBuf> = Vec::with_capacity(reports.len());
-        for r in reports {
-            let dir = base_dir.join(&r.ident.schema);
-            let file_path = dir.join(format!("{}.txt", &r.ident.name));
+    match mode {
+        SaveMode::SingleFile => {
+            let file_path = base_dir.join("all_databases_table_info.txt");
             crate::tools::common::fs_utils::ensure_dir_exists(&file_path)?;
-            let content = generate_report_content(r);
+            let mut content = String::new();
+            for r in reports {
+                content.push_str(&generate_report_content(r));
+                content.push('\n');
+                content.push_str(&"-".repeat(80));
+                content.push('\n');
+            }
             fs::write(&file_path, content)?;
-            files.push(file_path);
+            Ok(vec![file_path])
         }
-        Ok(files)
+        SaveMode::PerDatabase => {
+            let mut db_groups: std::collections::HashMap<String, Vec<&super::TableInfoReport>> =
+                std::collections::HashMap::new();
+            for report in reports {
+                db_groups
+                    .entry(report.ident.schema.clone())
+                    .or_default()
+                    .push(report);
+            }
+
+            let mut files: Vec<PathBuf> = Vec::with_capacity(db_groups.len());
+            for (db_name, db_reports) in db_groups {
+                let file_path = base_dir.join(format!("{}.txt", db_name));
+                crate::tools::common::fs_utils::ensure_dir_exists(&file_path)?;
+                let mut content = String::new();
+                for r in db_reports {
+                    content.push_str(&generate_report_content(r));
+                    content.push('\n');
+                    content.push_str(&"-".repeat(80));
+                    content.push('\n');
+                }
+                fs::write(&file_path, content)?;
+                files.push(file_path);
+            }
+            Ok(files)
+        }
     }
 }
 
