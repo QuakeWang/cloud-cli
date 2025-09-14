@@ -190,14 +190,13 @@ pub fn parse_partitions(rows: &super::sql::ResultSet) -> Result<TableStatsFromPa
 }
 
 pub fn parse_indexes_from_create(ddl: &str) -> Vec<IndexInfo> {
-    let mut result = Vec::new();
-    // Match lines like: INDEX idx_comment (`comment`) USING INVERTED ...
-    let re = Regex::new(
-        r"(?m)^\s*INDEX\s+`?(?P<name>\w+)`?\s*\((?P<cols>[^\)]*)\)\s*USING\s+(?P<itype>\w+)",
-    )
-    .ok();
-    if let Some(re) = re {
-        for cap in re.captures_iter(ddl) {
+    let mut result: Vec<IndexInfo> = Vec::new();
+
+    // Parse explicit INDEX ... USING ... (case-insensitive, supports multiple lines)
+    if let Ok(re_idx) = Regex::new(
+        r"(?mi)^\s*INDEX\s+`?(?P<name>[A-Za-z0-9_]+)`?\s*\((?P<cols>[^\)]*)\)\s*USING\s+(?P<itype>[A-Za-z0-9_]+)",
+    ) {
+        for cap in re_idx.captures_iter(ddl) {
             let name = cap
                 .name("name")
                 .map(|m| m.as_str())
@@ -217,5 +216,22 @@ pub fn parse_indexes_from_create(ddl: &str) -> Vec<IndexInfo> {
             });
         }
     }
+
+    // Parse bloom_filter_columns from PROPERTIES (fallback)
+    if let Ok(re_bf) = Regex::new(r#"(?i)"bloom_filter_columns"\s*=\s*"(?P<cols>[^"]*)""#)
+        && let Some(cap) = re_bf.captures(ddl)
+    {
+        let cols_raw = cap.name("cols").map(|m| m.as_str()).unwrap_or("");
+        let columns = parse_column_list(cols_raw);
+        if !columns.is_empty() {
+            let display_name = format!("bloom_filter({})", columns.join(","));
+            result.push(IndexInfo {
+                name: display_name,
+                columns,
+                index_type: "BLOOM_FILTER".to_string(),
+            });
+        }
+    }
+
     result
 }
