@@ -1,17 +1,10 @@
-use dialoguer::Input;
-
 use crate::error::{CliError, Result};
 
 pub struct InputHelper;
 
 impl InputHelper {
     pub fn prompt_non_empty(prompt: &str) -> Result<String> {
-        let input: String = Input::new()
-            .with_prompt(prompt)
-            .allow_empty(false)
-            .interact()
-            .map_err(|e| CliError::InvalidInput(e.to_string()))?;
-
+        let input = crate::ui::dialogs::input_text(prompt, "")?;
         let input = input.trim().to_string();
         if input.is_empty() {
             return Err(CliError::InvalidInput("Input cannot be empty".into()));
@@ -20,11 +13,7 @@ impl InputHelper {
     }
 
     pub fn prompt_number_with_default(prompt: &str, default: i64, min: i64) -> Result<i64> {
-        let input_str: String = Input::new()
-            .with_prompt(prompt)
-            .default(default.to_string())
-            .interact_text()
-            .map_err(|e| CliError::InvalidInput(e.to_string()))?;
+        let input_str = crate::ui::dialogs::input_text(prompt, &default.to_string())?;
 
         let value: i64 = input_str.trim().parse().unwrap_or(default).max(min);
         Ok(value)

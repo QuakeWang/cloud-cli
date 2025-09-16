@@ -3,6 +3,74 @@ use crate::error::{self, Result};
 use crate::tools::Tool;
 use crate::ui::*;
 
+fn index_by_name(tools: &[Box<dyn Tool>], name: &str) -> Option<usize> {
+    tools.iter().position(|t| t.name() == name)
+}
+
+fn run_tool_with_post(
+    config: &Config,
+    tools: &[Box<dyn Tool>],
+    index: usize,
+    service: &str,
+) -> Result<Option<()>> {
+    let tool = &*tools[index];
+    if let Err(e) = crate::execute_tool_enhanced(config, tool, service) {
+        match e {
+            error::CliError::GracefulExit => {}
+            _ => print_error(&format!("Tool execution failed: {e}")),
+        }
+        return Ok(Some(()));
+    }
+
+    match show_post_execution_menu(tool.name())? {
+        PostExecutionAction::Continue => Ok(Some(())),
+        PostExecutionAction::BackToMain => Err(error::CliError::GracefulExit),
+        PostExecutionAction::Exit => {
+            crate::ui::print_goodbye();
+            std::process::exit(0);
+        }
+    }
+}
+
+fn run_tool_by_name(
+    config: &Config,
+    tools: &[Box<dyn Tool>],
+    name: &str,
+    service: &str,
+) -> Result<Option<()>> {
+    let Some(index) = index_by_name(tools, name) else {
+        print_error(&format!("Tool '{name}' not found for {service}."));
+        return Ok(Some(()));
+    };
+    run_tool_with_post(config, tools, index, service)
+}
+
+fn run_jmap_submenu_by_names(
+    config: &Config,
+    tools: &[Box<dyn Tool>],
+    dump_name: &str,
+    histo_name: &str,
+    service: &str,
+) -> Result<Option<()>> {
+    loop {
+        match crate::ui::show_jmap_menu()? {
+            crate::ui::JmapAction::Dump => {
+                match run_tool_by_name(config, tools, dump_name, service) {
+                    Err(error::CliError::GracefulExit) => return Ok(None),
+                    _ => continue,
+                }
+            }
+            crate::ui::JmapAction::Histo => {
+                match run_tool_by_name(config, tools, histo_name, service) {
+                    Err(error::CliError::GracefulExit) => return Ok(None),
+                    _ => continue,
+                }
+            }
+            crate::ui::JmapAction::Back => return Ok(Some(())),
+        }
+    }
+}
+
 /// Generic loop for handling a service type (FE or BE).
 pub fn handle_service_loop(
     config: &Config,
@@ -21,80 +89,24 @@ pub fn handle_fe_service_loop(config: &Config, tools: &[Box<dyn Tool>]) -> Resul
     loop {
         match crate::ui::show_fe_tools_menu()? {
             crate::ui::FeToolAction::FeList => {
-                let tool = &*tools[0];
-                if let Err(e) = crate::execute_tool_enhanced(config, tool, "FE") {
-                    match e {
-                        error::CliError::GracefulExit => {}
-                        _ => print_error(&format!("Tool execution failed: {e}")),
-                    }
-                }
+                run_tool_by_name(config, tools, "fe-list", "FE").ok();
             }
-            crate::ui::FeToolAction::JmapDump => {
-                let tool = &*tools[1];
-                if let Err(e) = crate::execute_tool_enhanced(config, tool, "FE") {
-                    match e {
-                        error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
-                        _ => print_error(&format!("Tool execution failed: {e}")),
-                    }
-                }
-                match crate::ui::show_post_execution_menu(tool.name())? {
-                    crate::ui::PostExecutionAction::Continue => continue,
-                    crate::ui::PostExecutionAction::BackToMain => return Ok(()),
-                    crate::ui::PostExecutionAction::Exit => {
-                        crate::ui::print_goodbye();
-                        std::process::exit(0);
-                    }
-                }
-            }
-            crate::ui::FeToolAction::JmapHisto => {
-                let tool = &*tools[2];
-                if let Err(e) = crate::execute_tool_enhanced(config, tool, "FE") {
-                    match e {
-                        error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
-                        _ => print_error(&format!("Tool execution failed: {e}")),
-                    }
-                }
-                match crate::ui::show_post_execution_menu(tool.name())? {
-                    crate::ui::PostExecutionAction::Continue => continue,
-                    crate::ui::PostExecutionAction::BackToMain => return Ok(()),
-                    crate::ui::PostExecutionAction::Exit => {
-                        crate::ui::print_goodbye();
-                        std::process::exit(0);
-                    }
+            crate::ui::FeToolAction::Jmap => {
+                match run_jmap_submenu_by_names(config, tools, "jmap-dump", "jmap-histo", "FE") {
+                    Err(error::CliError::GracefulExit) => return Ok(()),
+                    _ => continue,
                 }
             }
             crate::ui::FeToolAction::Jstack => {
-                let tool = &*tools[3];
-                if let Err(e) = crate::execute_tool_enhanced(config, tool, "FE") {
-                    match e {
-                        error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
-                        _ => print_error(&format!("Tool execution failed: {e}")),
-                    }
-                }
-                match crate::ui::show_post_execution_menu(tool.name())? {
-                    crate::ui::PostExecutionAction::Continue => continue,
-                    crate::ui::PostExecutionAction::BackToMain => return Ok(()),
-                    crate::ui::PostExecutionAction::Exit => {
-                        crate::ui::print_goodbye();
-                        std::process::exit(0);
-                    }
+                match run_tool_by_name(config, tools, "jstack", "FE") {
+                    Err(error::CliError::GracefulExit) => return Ok(()),
+                    _ => continue,
                 }
             }
             crate::ui::FeToolAction::FeProfiler => {
-                let tool = &*tools[4];
-                if let Err(e) = crate::execute_tool_enhanced(config, tool, "FE") {
-                    match e {
-                        error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
-                        _ => print_error(&format!("Tool execution failed: {e}")),
-                    }
-                }
-                match crate::ui::show_post_execution_menu(tool.name())? {
-                    crate::ui::PostExecutionAction::Continue => continue,
-                    crate::ui::PostExecutionAction::BackToMain => return Ok(()),
-                    crate::ui::PostExecutionAction::Exit => {
-                        crate::ui::print_goodbye();
-                        std::process::exit(0);
-                    }
+                match run_tool_by_name(config, tools, "fe-profiler", "FE") {
+                    Err(error::CliError::GracefulExit) => return Ok(()),
+                    _ => continue,
                 }
             }
             crate::ui::FeToolAction::TableInfo => {
@@ -172,25 +184,55 @@ fn execute_routine_load_tool(
 /// Handle BE service loop (original logic)
 pub fn handle_be_service_loop(config: &Config, tools: &[Box<dyn Tool>]) -> Result<()> {
     loop {
-        match show_tool_selection_menu(2, "Select BE tool", tools)? {
-            Some(tool) => {
-                if let Err(e) = crate::execute_tool_enhanced(config, tool, "BE") {
-                    match e {
-                        error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
-                        _ => print_error(&format!("Tool execution failed: {e}")),
-                    }
-                }
-
-                match show_post_execution_menu(tool.name())? {
-                    PostExecutionAction::Continue => continue,
-                    PostExecutionAction::BackToMain => return Ok(()),
-                    PostExecutionAction::Exit => {
-                        crate::ui::print_goodbye();
-                        std::process::exit(0);
-                    }
+        match crate::ui::show_be_tools_menu()? {
+            crate::ui::BeToolAction::BeList => {
+                match run_tool_by_name(config, tools, "be-list", "BE") {
+                    Err(error::CliError::GracefulExit) => return Ok(()),
+                    _ => continue,
                 }
             }
-            None => return Ok(()), // "Back" was selected
+            crate::ui::BeToolAction::Pstack => {
+                match run_tool_by_name(config, tools, "pstack", "BE") {
+                    Err(error::CliError::GracefulExit) => return Ok(()),
+                    _ => continue,
+                }
+            }
+            crate::ui::BeToolAction::BeVars => {
+                match run_tool_by_name(config, tools, "get-be-vars", "BE") {
+                    Err(error::CliError::GracefulExit) => return Ok(()),
+                    _ => continue,
+                }
+            }
+            crate::ui::BeToolAction::Jmap => {
+                match run_jmap_submenu_by_names(config, tools, "jmap-dump", "jmap-histo", "BE") {
+                    Err(error::CliError::GracefulExit) => return Ok(()),
+                    _ => continue,
+                }
+            }
+            crate::ui::BeToolAction::PipelineTasks => {
+                match run_tool_by_name(config, tools, "pipeline-tasks", "BE") {
+                    Err(error::CliError::GracefulExit) => return Ok(()),
+                    _ => continue,
+                }
+            }
+            crate::ui::BeToolAction::Memz => loop {
+                match crate::ui::show_memz_menu()? {
+                    crate::ui::MemzAction::Current => {
+                        match run_tool_by_name(config, tools, "memz", "BE") {
+                            Err(error::CliError::GracefulExit) => return Ok(()),
+                            _ => continue,
+                        }
+                    }
+                    crate::ui::MemzAction::Global => {
+                        match run_tool_by_name(config, tools, "memz-global", "BE") {
+                            Err(error::CliError::GracefulExit) => return Ok(()),
+                            _ => continue,
+                        }
+                    }
+                    crate::ui::MemzAction::Back => break,
+                }
+            },
+            crate::ui::BeToolAction::Back => return Ok(()),
         }
     }
 }

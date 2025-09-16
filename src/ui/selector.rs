@@ -38,9 +38,10 @@ impl<T> InteractiveSelector<T> {
         let mut selection: usize = 0;
         let mut last_drawn_lines: usize;
 
+        let header_lines = 2usize;
         crate::ui::print_info("");
         crate::ui::print_info(&self.title.to_string());
-        crate::ui::print_info("Use ↑/↓ move, ←/→ page, 1-9 jump, Enter to select:");
+        crate::ui::print_info("Use ↑/↓, ←/→, 1-9, Enter");
 
         term.hide_cursor()
             .map_err(|e| CliError::InvalidInput(e.to_string()))?;
@@ -55,7 +56,8 @@ impl<T> InteractiveSelector<T> {
                 Key::Enter => {
                     term.show_cursor()
                         .map_err(|e| CliError::InvalidInput(e.to_string()))?;
-                    term.clear_last_lines(last_drawn_lines).ok();
+                    term.clear_last_lines(last_drawn_lines + header_lines + 1)
+                        .ok();
                     break;
                 }
                 Key::ArrowUp => {
@@ -109,7 +111,6 @@ impl<T> InteractiveSelector<T> {
                 _ => {}
             }
 
-            // Clear the previously drawn list block to avoid leftover lines when page size shrinks
             term.clear_last_lines(last_drawn_lines).ok();
             last_drawn_lines = self.render_selection_list(&term, selection)?;
         }
