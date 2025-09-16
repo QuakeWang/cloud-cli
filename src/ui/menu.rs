@@ -1,5 +1,4 @@
 use crate::error::{CliError, Result};
-use crate::tools::Tool;
 use crate::ui;
 use console::{Key, Term, style};
 use dialoguer::Select;
@@ -84,7 +83,6 @@ fn show_interactive_menu(step: u8, title: &str, items: &[String]) -> Result<usiz
                 if let Some(digit) = c.to_digit(10) {
                     let index = (digit as usize).saturating_sub(1);
                     if index < items.len() {
-                        // 数字键选择后立即返回，避免 selection 被意外修改
                         term.show_cursor()?;
                         term.clear_last_lines(items.len())?;
                         return Ok(index);
@@ -120,8 +118,7 @@ pub enum MainMenuAction {
 #[derive(Debug, Clone, Copy)]
 pub enum FeToolAction {
     FeList,
-    JmapDump,
-    JmapHisto,
+    Jmap,
     Jstack,
     FeProfiler,
     TableInfo,
@@ -177,26 +174,20 @@ pub fn show_fe_tools_menu() -> Result<FeToolAction> {
                 description: "List and select FE host (IP)".to_string(),
             },
             MenuOption {
-                action: FeToolAction::JmapDump,
+                action: FeToolAction::Jmap,
                 key: "[2]".to_string(),
-                name: "jmap-dump".to_string(),
-                description: "Generate heap dump (.hprof)".to_string(),
-            },
-            MenuOption {
-                action: FeToolAction::JmapHisto,
-                key: "[3]".to_string(),
-                name: "jmap-histo".to_string(),
-                description: "Generate histogram (.log)".to_string(),
+                name: "jmap".to_string(),
+                description: "Java heap tools (dump/histo)".to_string(),
             },
             MenuOption {
                 action: FeToolAction::Jstack,
-                key: "[4]".to_string(),
+                key: "[3]".to_string(),
                 name: "jstack".to_string(),
                 description: "Generate thread stack trace (.log)".to_string(),
             },
             MenuOption {
                 action: FeToolAction::FeProfiler,
-                key: "[5]".to_string(),
+                key: "[4]".to_string(),
                 name: "fe-profiler".to_string(),
                 description:
                     "Generate flame graph for FE performance analysis using async-profiler"
@@ -204,19 +195,19 @@ pub fn show_fe_tools_menu() -> Result<FeToolAction> {
             },
             MenuOption {
                 action: FeToolAction::TableInfo,
-                key: "[6]".to_string(),
+                key: "[5]".to_string(),
                 name: "table-info".to_string(),
                 description: "Collect table info for a selected table".to_string(),
             },
             MenuOption {
                 action: FeToolAction::RoutineLoad,
-                key: "[7]".to_string(),
+                key: "[6]".to_string(),
                 name: "routine-load".to_string(),
                 description: "Routine Load management tools".to_string(),
             },
             MenuOption {
                 action: FeToolAction::Back,
-                key: "[8]".to_string(),
+                key: "[7]".to_string(),
                 name: "← Back".to_string(),
                 description: "Return to main menu".to_string(),
             },
@@ -259,40 +250,137 @@ pub fn show_routine_load_menu() -> Result<RoutineLoadAction> {
     menu.show()
 }
 
-pub fn show_tool_selection_menu<'a>(
-    step: u8,
-    title: &str,
-    tools: &'a [Box<dyn Tool>],
-) -> Result<Option<&'a dyn Tool>> {
-    let mut items: Vec<String> = tools
-        .iter()
-        .enumerate()
-        .map(|(i, tool)| format_menu_item(&format!("[{}]", i + 1), tool.name(), tool.description()))
-        .collect();
+#[derive(Debug, Clone, Copy)]
+pub enum JmapAction {
+    Dump,
+    Histo,
+    Back,
+}
 
-    let back_index = items.len();
-    items.push(format_menu_item(
-        &format!("[{}]", back_index + 1),
-        "← Back",
-        "Return to main menu",
-    ));
-    let exit_index = items.len();
-    items.push(format_menu_item(
-        &format!("[{}]", exit_index + 1),
-        "Exit",
-        "Exit the application",
-    ));
+pub fn show_jmap_menu() -> Result<JmapAction> {
+    let menu = Menu {
+        step: 3,
+        title: "JMAP Tools".to_string(),
+        options: vec![
+            MenuOption {
+                action: JmapAction::Dump,
+                key: "[1]".to_string(),
+                name: "Dump".to_string(),
+                description: "Generate heap dump (.hprof)".to_string(),
+            },
+            MenuOption {
+                action: JmapAction::Histo,
+                key: "[2]".to_string(),
+                name: "Histo".to_string(),
+                description: "Generate histogram (.log)".to_string(),
+            },
+            MenuOption {
+                action: JmapAction::Back,
+                key: "[3]".to_string(),
+                name: "← Back to FE Tools".to_string(),
+                description: "Return to FE tools menu".to_string(),
+            },
+        ],
+    };
+    menu.show()
+}
 
-    let selection = show_interactive_menu(step, title, &items)?;
+#[derive(Debug, Clone, Copy)]
+pub enum BeToolAction {
+    BeList,
+    Pstack,
+    BeVars,
+    Jmap,
+    PipelineTasks,
+    Memz,
+    Back,
+}
 
-    if selection < tools.len() {
-        Ok(Some(&*tools[selection]))
-    } else if selection == back_index {
-        Ok(None)
-    } else {
-        ui::print_goodbye();
-        std::process::exit(0);
-    }
+pub fn show_be_tools_menu() -> Result<BeToolAction> {
+    let menu = Menu {
+        step: 2,
+        title: "Select BE tool".to_string(),
+        options: vec![
+            MenuOption {
+                action: BeToolAction::BeList,
+                key: "[1]".to_string(),
+                name: "be-list".to_string(),
+                description: "List and select BE host (IP)".to_string(),
+            },
+            MenuOption {
+                action: BeToolAction::Pstack,
+                key: "[2]".to_string(),
+                name: "pstack".to_string(),
+                description: "Generate thread stack trace (.log)".to_string(),
+            },
+            MenuOption {
+                action: BeToolAction::Jmap,
+                key: "[3]".to_string(),
+                name: "jmap".to_string(),
+                description: "Java heap tools (dump/histo)".to_string(),
+            },
+            MenuOption {
+                action: BeToolAction::BeVars,
+                key: "[4]".to_string(),
+                name: "be-vars".to_string(),
+                description: "Query BE variables via HTTP".to_string(),
+            },
+            MenuOption {
+                action: BeToolAction::PipelineTasks,
+                key: "[5]".to_string(),
+                name: "pipeline-tasks".to_string(),
+                description: "Collect pipeline tasks from BE".to_string(),
+            },
+            MenuOption {
+                action: BeToolAction::Memz,
+                key: "[6]".to_string(),
+                name: "memz".to_string(),
+                description: "Memory tracker tools (current/global)".to_string(),
+            },
+            MenuOption {
+                action: BeToolAction::Back,
+                key: "[7]".to_string(),
+                name: "← Back".to_string(),
+                description: "Return to main menu".to_string(),
+            },
+        ],
+    };
+    menu.show()
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum MemzAction {
+    Current,
+    Global,
+    Back,
+}
+
+pub fn show_memz_menu() -> Result<MemzAction> {
+    let menu = Menu {
+        step: 3,
+        title: "MEMZ Tools".to_string(),
+        options: vec![
+            MenuOption {
+                action: MemzAction::Current,
+                key: "[1]".to_string(),
+                name: "Current".to_string(),
+                description: "Show memory tracker (current process)".to_string(),
+            },
+            MenuOption {
+                action: MemzAction::Global,
+                key: "[2]".to_string(),
+                name: "Global".to_string(),
+                description: "Show memory tracker (global)".to_string(),
+            },
+            MenuOption {
+                action: MemzAction::Back,
+                key: "[3]".to_string(),
+                name: "← Back to BE Tools".to_string(),
+                description: "Return to BE tools menu".to_string(),
+            },
+        ],
+    };
+    menu.show()
 }
 
 #[derive(Debug, Clone, Copy)]

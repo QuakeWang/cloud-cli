@@ -199,11 +199,7 @@ fn generate_report_content(report: &super::TableInfoReport) -> String {
             .collect::<Vec<_>>()
             .join(", ")
     };
-    out.push_str(&format!(
-        "  {:<18} {}\n",
-        "Indexes:",
-        truncate(&indexes_line, 50)
-    ));
+    out.push_str(&format!("  {:<18} {}\n", "Indexes:", indexes_line));
 
     out.push('\n');
     out.push_str("Partitions:\n");
