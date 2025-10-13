@@ -23,7 +23,6 @@ impl Tool for PipelineTasksTool {
         let result = be_http_client::request_be_webserver_port("/api/running_pipeline_tasks", None);
 
         let handler = BeResponseHandler {
-            success_message: "Pipeline tasks fetched successfully!",
             empty_warning: "No running pipeline tasks found.",
             error_context: "Failed to fetch pipeline tasks",
             tips: "Ensure the BE service is running and accessible.",

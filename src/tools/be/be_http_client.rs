@@ -8,31 +8,30 @@ use std::process::Command;
 
 const BE_DEFAULT_IP: &str = "127.0.0.1";
 
-/// Send an HTTP GET request to a BE API endpoint
-pub fn request_be_webserver_port(endpoint: &str, filter_pattern: Option<&str>) -> Result<String> {
-    let mut be_targets: BTreeSet<(String, u16)> = BTreeSet::new();
-
+fn get_be_targets() -> Result<BTreeSet<(String, u16)>> {
     let ports = get_be_http_ports()?;
-
     let selected_host = be::list::get_selected_be_host();
-
     let cluster_hosts = get_be_ip().unwrap_or_default();
 
     let mut all_hosts = BTreeSet::new();
-    if let Some(host) = &selected_host {
-        all_hosts.insert(host.clone());
-    }
-    for host in cluster_hosts {
+    if let Some(host) = selected_host {
         all_hosts.insert(host);
     }
+    all_hosts.extend(cluster_hosts);
 
     if all_hosts.is_empty() {
         all_hosts.insert(BE_DEFAULT_IP.to_string());
     }
 
-    for host in all_hosts {
-        be_targets.extend(ports.iter().map(|p| (host.clone(), *p)));
-    }
+    Ok(all_hosts
+        .into_iter()
+        .flat_map(|host| ports.iter().map(move |p| (host.clone(), *p)))
+        .collect())
+}
+
+/// Send an HTTP GET request to a BE API endpoint
+pub fn request_be_webserver_port(endpoint: &str, filter_pattern: Option<&str>) -> Result<String> {
+    let be_targets = get_be_targets()?;
 
     for (host, port) in &be_targets {
         let url = format!("http://{host}:{port}{endpoint}");
@@ -103,4 +102,32 @@ pub fn get_be_ip() -> Result<Vec<String>> {
     }
 
     Ok(vec![BE_DEFAULT_IP.to_string()])
+}
+
+/// Send an HTTP POST request to a BE API endpoint
+pub fn post_be_endpoint(endpoint: &str) -> Result<String> {
+    let be_targets = get_be_targets()?;
+
+    for (host, port) in &be_targets {
+        let url = format!("http://{host}:{port}{endpoint}");
+        let mut curl_cmd = Command::new("curl");
+        curl_cmd.args(["-sS", "-X", "POST", &url]);
+
+        if let Ok(output) = executor::execute_command(&mut curl_cmd, "curl") {
+            return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+        }
+    }
+
+    let ports_str = be_targets
+        .iter()
+        .map(|(h, p)| format!("{h}:{p}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    ui::print_warning(
+        "Could not connect to any BE http endpoint. You can select a host via 'be-list'.",
+    );
+    Err(CliError::ToolExecutionFailed(format!(
+        "Could not connect to any BE http port ({ports_str}). Check if BE is running."
+    )))
 }

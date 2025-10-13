@@ -1,3 +1,4 @@
+mod be_config_update;
 mod be_http_client;
 mod be_vars;
 mod jmap;
@@ -7,6 +8,7 @@ mod pipeline_tasks;
 mod pstack;
 mod response_handler;
 
+pub use be_config_update::BeUpdateConfigTool;
 pub use be_vars::BeVarsTool;
 pub use jmap::{JmapDumpTool, JmapHistoTool};
 pub use list::BeListTool;

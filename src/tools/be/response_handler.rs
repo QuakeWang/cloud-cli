@@ -8,42 +8,39 @@ use std::path::PathBuf;
 
 /// Configuration for handling BE API responses
 pub struct BeResponseHandler<'a> {
-    pub success_message: &'a str,
     pub empty_warning: &'a str,
     pub error_context: &'a str,
     pub tips: &'a str,
 }
 
 impl<'a> BeResponseHandler<'a> {
+    fn handle_error(&self, e: crate::error::CliError) -> crate::error::CliError {
+        ui::print_error(&format!("{}: {e}.", self.error_context));
+        ui::print_info(&format!("Tips: {}", self.tips));
+        e
+    }
+
     /// Handle response for console-only output (like be_vars)
     pub fn handle_console_result(
         &self,
         result: Result<String>,
         context: &str,
     ) -> Result<ExecutionResult> {
-        match result {
-            Ok(output) => {
-                ui::print_success(self.success_message);
-                println!();
-                ui::print_info("Results:");
+        let output = result.map_err(|e| self.handle_error(e))?;
 
-                if output.is_empty() {
-                    ui::print_warning(&self.empty_warning.replace("{}", context));
-                } else {
-                    println!("{output}");
-                }
+        println!();
+        ui::print_info("Results:");
 
-                Ok(ExecutionResult {
-                    output_path: PathBuf::from("console_output"),
-                    message: format!("Query completed for: {context}"),
-                })
-            }
-            Err(e) => {
-                ui::print_error(&format!("{}: {e}.", self.error_context));
-                ui::print_info(&format!("Tips: {}", self.tips));
-                Err(e)
-            }
+        if output.is_empty() {
+            ui::print_warning(&self.empty_warning.replace("{}", context));
+        } else {
+            println!("{output}");
         }
+
+        Ok(ExecutionResult {
+            output_path: PathBuf::from("console_output"),
+            message: format!("Query completed for: {context}"),
+        })
     }
 
     /// Handle response with file output (like pipeline_tasks)
@@ -57,47 +54,36 @@ impl<'a> BeResponseHandler<'a> {
     where
         F: Fn(&str) -> String,
     {
-        match result {
-            Ok(output) => {
-                ui::print_success(self.success_message);
-                println!();
-                ui::print_info("Results:");
+        let output = result.map_err(|e| self.handle_error(e))?;
 
-                if output.trim().is_empty() {
-                    ui::print_warning(self.empty_warning);
+        println!();
+        ui::print_info("Results:");
 
-                    Ok(ExecutionResult {
-                        output_path: PathBuf::from("console_output"),
-                        message: "No data found".to_string(),
-                    })
-                } else {
-                    let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
-
-                    let filename = format!("{file_prefix}_{timestamp}.txt");
-                    let output_path = config.output_dir.join(filename);
-
-                    fs::write(&output_path, &output)?;
-
-                    println!("{}", summary_fn(&output));
-
-                    let message = format!(
-                        "{} saved to {}",
-                        file_prefix.replace('_', " ").to_title_case(),
-                        output_path.display()
-                    );
-
-                    Ok(ExecutionResult {
-                        output_path,
-                        message,
-                    })
-                }
-            }
-            Err(e) => {
-                ui::print_error(&format!("{}: {e}.", self.error_context));
-                ui::print_info(&format!("Tips: {}", self.tips));
-                Err(e)
-            }
+        if output.trim().is_empty() {
+            ui::print_warning(self.empty_warning);
+            return Ok(ExecutionResult {
+                output_path: PathBuf::from("console_output"),
+                message: "No data found".to_string(),
+            });
         }
+
+        let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("{file_prefix}_{timestamp}.txt");
+        let output_path = config.output_dir.join(filename);
+
+        fs::write(&output_path, &output)?;
+        println!("{}", summary_fn(&output));
+
+        let message = format!(
+            "{} saved to {}",
+            file_prefix.replace('_', " ").to_title_case(),
+            output_path.display()
+        );
+
+        Ok(ExecutionResult {
+            output_path,
+            message,
+        })
     }
 }
 
