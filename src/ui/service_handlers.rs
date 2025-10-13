@@ -197,12 +197,23 @@ pub fn handle_be_service_loop(config: &Config, tools: &[Box<dyn Tool>]) -> Resul
                     _ => continue,
                 }
             }
-            crate::ui::BeToolAction::BeVars => {
-                match run_tool_by_name(config, tools, "get-be-vars", "BE") {
-                    Err(error::CliError::GracefulExit) => return Ok(()),
-                    _ => continue,
+            crate::ui::BeToolAction::BeConfig => loop {
+                match crate::ui::show_be_config_menu()? {
+                    crate::ui::BeConfigAction::GetVars => {
+                        match run_tool_by_name(config, tools, "get-be-vars", "BE") {
+                            Err(error::CliError::GracefulExit) => return Ok(()),
+                            _ => continue,
+                        }
+                    }
+                    crate::ui::BeConfigAction::UpdateConfig => {
+                        match run_tool_by_name(config, tools, "set-be-config", "BE") {
+                            Err(error::CliError::GracefulExit) => return Ok(()),
+                            _ => continue,
+                        }
+                    }
+                    crate::ui::BeConfigAction::Back => break,
                 }
-            }
+            },
             crate::ui::BeToolAction::Jmap => {
                 match run_jmap_submenu_by_names(config, tools, "jmap-dump", "jmap-histo", "BE") {
                     Err(error::CliError::GracefulExit) => return Ok(()),

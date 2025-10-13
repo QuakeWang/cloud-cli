@@ -289,7 +289,7 @@ pub fn show_jmap_menu() -> Result<JmapAction> {
 pub enum BeToolAction {
     BeList,
     Pstack,
-    BeVars,
+    BeConfig,
     Jmap,
     PipelineTasks,
     Memz,
@@ -320,10 +320,10 @@ pub fn show_be_tools_menu() -> Result<BeToolAction> {
                 description: "Java heap tools (dump/histo)".to_string(),
             },
             MenuOption {
-                action: BeToolAction::BeVars,
+                action: BeToolAction::BeConfig,
                 key: "[4]".to_string(),
-                name: "be-vars".to_string(),
-                description: "Query BE variables via HTTP".to_string(),
+                name: "be-config".to_string(),
+                description: "BE config tools (get-vars/update-config)".to_string(),
             },
             MenuOption {
                 action: BeToolAction::PipelineTasks,
@@ -342,6 +342,41 @@ pub fn show_be_tools_menu() -> Result<BeToolAction> {
                 key: "[7]".to_string(),
                 name: "← Back".to_string(),
                 description: "Return to main menu".to_string(),
+            },
+        ],
+    };
+    menu.show()
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum BeConfigAction {
+    GetVars,
+    UpdateConfig,
+    Back,
+}
+
+pub fn show_be_config_menu() -> Result<BeConfigAction> {
+    let menu = Menu {
+        step: 3,
+        title: "BE Config Tools".to_string(),
+        options: vec![
+            MenuOption {
+                action: BeConfigAction::GetVars,
+                key: "[1]".to_string(),
+                name: "get-vars".to_string(),
+                description: "Query BE variables via HTTP".to_string(),
+            },
+            MenuOption {
+                action: BeConfigAction::UpdateConfig,
+                key: "[2]".to_string(),
+                name: "update-config".to_string(),
+                description: "Update BE configuration via HTTP".to_string(),
+            },
+            MenuOption {
+                action: BeConfigAction::Back,
+                key: "[3]".to_string(),
+                name: "← Back to BE Tools".to_string(),
+                description: "Return to BE tools menu".to_string(),
             },
         ],
     };

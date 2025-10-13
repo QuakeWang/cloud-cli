@@ -31,7 +31,6 @@ impl Tool for BeVarsTool {
         let result = be_http_client::request_be_webserver_port("/varz", Some(&variable_name));
 
         let handler = BeResponseHandler {
-            success_message: "Query completed!",
             empty_warning: "No variables found matching '{}'.",
             error_context: "Failed to query BE",
             tips: "Ensure the BE service is running and accessible.",
