@@ -181,7 +181,7 @@ pub fn get_paths(env: Environment) -> Result<(PathBuf, PathBuf)> {
     let (install_path, jdk_path) = get_paths_by_pid(pid);
 
     // Verify that we have a valid DORIS_HOME path
-    if install_path == PathBuf::from("/opt/selectdb") {
+    if install_path.as_path() == Path::new("/opt/selectdb") {
         return Err(CliError::ConfigError(format!(
             "DORIS_HOME not found in {env} process environment"
         )));
