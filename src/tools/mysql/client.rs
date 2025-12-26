@@ -214,8 +214,10 @@ impl MySQLTool {
         let defaults_file = TempMySqlDefaultsFile::create(host, port, user, password)?;
 
         let mut command = Command::new("mysql");
+        // Must be the first argument to ensure MySQL reads only this file and does not
+        // merge/override with system/user option files such as ~/.my.cnf.
         command.arg(format!(
-            "--defaults-extra-file={}",
+            "--defaults-file={}",
             defaults_file.path().display()
         ));
 
