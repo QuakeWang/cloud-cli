@@ -1,6 +1,9 @@
 use crate::config_loader::Environment;
 use crate::config_loader::process_detector;
 use crate::error::{CliError, Result};
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub struct MySQLTool;
@@ -12,6 +15,88 @@ enum OutputMode {
     Standard,
     /// Raw, no headers, batch, no pretty formatting (-N -B -r -A)
     Raw,
+}
+
+struct TempMySqlDefaultsFile {
+    path: PathBuf,
+}
+
+impl TempMySqlDefaultsFile {
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn create(host: &str, port: u16, user: &str, password: &str) -> Result<Self> {
+        let random: [u8; 16] = rand::random();
+        let suffix = random
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
+        let filename = format!("cloud-cli-mysql-{suffix}.cnf");
+        let path = std::env::temp_dir().join(filename);
+
+        let mut open_options = fs::OpenOptions::new();
+        open_options.write(true).create_new(true);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            open_options.mode(0o600);
+        }
+
+        let mut file = open_options.open(&path).map_err(|e| {
+            CliError::ToolExecutionFailed(format!(
+                "Failed to create mysql defaults file at {}: {e}",
+                path.display()
+            ))
+        })?;
+
+        let user = escape_mysql_option_value(user);
+        let host = escape_mysql_option_value(host);
+        let password = escape_mysql_option_value(password);
+
+        writeln!(file, "[client]").map_err(CliError::IoError)?;
+        writeln!(file, "user=\"{user}\"").map_err(CliError::IoError)?;
+        writeln!(file, "host=\"{host}\"").map_err(CliError::IoError)?;
+        writeln!(file, "port={port}").map_err(CliError::IoError)?;
+        writeln!(file, "protocol=tcp").map_err(CliError::IoError)?;
+        if !password.is_empty() {
+            writeln!(file, "password=\"{password}\"").map_err(CliError::IoError)?;
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&path)
+                .map_err(CliError::IoError)?
+                .permissions();
+            perms.set_mode(0o600);
+            fs::set_permissions(&path, perms).map_err(CliError::IoError)?;
+        }
+
+        Ok(Self { path })
+    }
+}
+
+impl Drop for TempMySqlDefaultsFile {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+fn escape_mysql_option_value(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for ch in input.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            _ => out.push(ch),
+        }
+    }
+    out
 }
 
 impl MySQLTool {
@@ -110,35 +195,45 @@ impl MySQLTool {
         query: &str,
         mode: OutputMode,
     ) -> Result<std::process::Output> {
-        let mut command = Command::new("mysql");
-        command.arg("-h").arg(host);
-        command.arg("-P").arg(port.to_string());
-        command.arg("-u").arg(user);
+        let (mut command, _defaults_file) =
+            Self::build_mysql_command(host, port, user, password, query, mode)?;
 
-        if !password.is_empty() {
-            command.arg(format!("-p{password}"));
-        }
+        command
+            .output()
+            .map_err(|e| CliError::ToolExecutionFailed(format!("Failed to execute mysql: {e}")))
+    }
+
+    fn build_mysql_command(
+        host: &str,
+        port: u16,
+        user: &str,
+        password: &str,
+        query: &str,
+        mode: OutputMode,
+    ) -> Result<(Command, TempMySqlDefaultsFile)> {
+        let defaults_file = TempMySqlDefaultsFile::create(host, port, user, password)?;
+
+        let mut command = Command::new("mysql");
+        command.arg(format!(
+            "--defaults-extra-file={}",
+            defaults_file.path().display()
+        ));
 
         match mode {
             OutputMode::Standard => {
                 command.arg("-A");
             }
             OutputMode::Raw => {
-                command.arg("-N");
-                command.arg("-B");
-                command.arg("-r");
-                command.arg("-A");
+                command.args(["-N", "-B", "-r", "-A"]);
             }
         }
 
         command.arg("-e").arg(query);
 
-        // Prevent mysql from prompting for a password interactively
+        // Prevent mysql from prompting for a password interactively.
         command.stdin(std::process::Stdio::null());
 
-        command
-            .output()
-            .map_err(|e| CliError::ToolExecutionFailed(format!("Failed to execute mysql: {e}")))
+        Ok((command, defaults_file))
     }
 
     /// Lists databases (excluding system databases) using raw mysql output
