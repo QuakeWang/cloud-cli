@@ -1,3 +1,4 @@
+mod audit_topsql;
 mod jmap;
 mod jstack;
 mod list;
@@ -5,6 +6,7 @@ mod profiler;
 pub mod routine_load;
 pub mod table_info;
 
+pub use audit_topsql::FeAuditTopSqlTool;
 pub use jmap::{JmapDumpTool, JmapHistoTool};
 pub use jstack::JstackTool;
 pub use list::FeListTool;

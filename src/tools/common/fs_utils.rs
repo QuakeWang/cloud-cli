@@ -92,6 +92,10 @@ pub fn collect_fe_logs(dir: &Path) -> Result<Vec<PathBuf>> {
     collect_log_files(dir, "fe.log")
 }
 
+pub fn collect_fe_audit_logs(dir: &Path) -> Result<Vec<PathBuf>> {
+    collect_log_files(dir, "fe.audit.log")
+}
+
 pub fn collect_be_logs(dir: &Path) -> Result<Vec<PathBuf>> {
     collect_log_files(dir, "be.INFO")
 }

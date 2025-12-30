@@ -50,7 +50,7 @@ impl ToolRegistry {
         use crate::tools::be::{JmapDumpTool as BeJmapDumpTool, JmapHistoTool as BeJmapHistoTool};
         use crate::tools::fe::routine_load::get_routine_load_tools;
         use crate::tools::fe::{
-            FeListTool, FeProfilerTool, JmapDumpTool, JmapHistoTool, JstackTool,
+            FeAuditTopSqlTool, FeListTool, FeProfilerTool, JmapDumpTool, JmapHistoTool, JstackTool,
         };
 
         let mut registry = Self {
@@ -64,6 +64,7 @@ impl ToolRegistry {
         registry.fe_tools.push(Box::new(JmapHistoTool));
         registry.fe_tools.push(Box::new(JstackTool));
         registry.fe_tools.push(Box::new(FeProfilerTool));
+        registry.fe_tools.push(Box::new(FeAuditTopSqlTool));
 
         // Register Routine Load tools
         registry.fe_tools.extend(get_routine_load_tools());
