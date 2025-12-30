@@ -14,7 +14,7 @@ fn run_tool_with_post(
     service: &str,
 ) -> Result<Option<()>> {
     let tool = &*tools[index];
-    if let Err(e) = crate::execute_tool_enhanced(config, tool, service) {
+    if let Err(e) = crate::ui::tool_executor::execute_tool_enhanced(config, tool, service) {
         match e {
             error::CliError::GracefulExit => {}
             _ => print_error(&format!("Tool execution failed: {e}")),
@@ -122,6 +122,12 @@ pub fn handle_fe_service_loop(config: &Config, tools: &[Box<dyn Tool>]) -> Resul
                     }
                 }
             }
+            crate::ui::FeToolAction::FeAuditTopSql => {
+                match run_tool_by_name(config, tools, "fe-audit-topsql", "FE") {
+                    Err(error::CliError::GracefulExit) => return Ok(()),
+                    _ => continue,
+                }
+            }
             crate::ui::FeToolAction::Back => return Ok(()),
         }
     }
@@ -164,7 +170,7 @@ fn execute_routine_load_tool(
         ))
     })?;
 
-    if let Err(e) = crate::execute_tool_enhanced(config, tool, "FE") {
+    if let Err(e) = crate::ui::tool_executor::execute_tool_enhanced(config, tool, "FE") {
         match e {
             error::CliError::GracefulExit => { /* Do nothing, just loop again */ }
             _ => print_error(&format!("Tool execution failed: {e}")),

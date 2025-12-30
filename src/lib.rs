@@ -7,11 +7,9 @@ pub mod process;
 pub mod tools;
 pub mod ui;
 
-use config::Config;
 use config_loader::persist_configuration;
 use dialoguer::Confirm;
 use error::Result;
-use tools::Tool;
 use tools::mysql::CredentialManager;
 use ui::*;
 
@@ -97,8 +95,4 @@ pub fn run_cli() -> Result<()> {
 
     ui::print_goodbye();
     Ok(())
-}
-
-fn execute_tool_enhanced(config: &Config, tool: &dyn Tool, service_name: &str) -> Result<()> {
-    ui::tool_executor::execute_tool_enhanced(config, tool, service_name)
 }

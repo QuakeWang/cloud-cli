@@ -123,6 +123,7 @@ pub enum FeToolAction {
     FeProfiler,
     TableInfo,
     RoutineLoad,
+    FeAuditTopSql,
     Back,
 }
 
@@ -206,8 +207,14 @@ pub fn show_fe_tools_menu() -> Result<FeToolAction> {
                 description: "Routine Load management tools".to_string(),
             },
             MenuOption {
-                action: FeToolAction::Back,
+                action: FeToolAction::FeAuditTopSql,
                 key: "[7]".to_string(),
+                name: "fe-audit-topsql".to_string(),
+                description: "Analyze fe.audit.log and generate TopSQL report".to_string(),
+            },
+            MenuOption {
+                action: FeToolAction::Back,
+                key: "[8]".to_string(),
                 name: "← Back".to_string(),
                 description: "Return to main menu".to_string(),
             },
