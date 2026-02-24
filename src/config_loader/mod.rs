@@ -335,6 +335,51 @@ pub fn get_current_pid() -> Option<u32> {
     load_config().ok()?.get_valid_pid()
 }
 
+fn select_pid_for_service(config: &DorisConfig, service_name: &str) -> Option<u32> {
+    match service_name {
+        "FE" => config.fe_process_pid.or_else(|| {
+            if config.environment == Environment::FE {
+                config.process_pid
+            } else {
+                None
+            }
+        }),
+        "BE" => config.be_process_pid.or_else(|| {
+            if config.environment == Environment::BE {
+                config.process_pid
+            } else {
+                None
+            }
+        }),
+        _ => config.process_pid,
+    }
+}
+
+fn is_pid_running(pid: u32) -> bool {
+    std::process::Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+/// Get a PID by service type to avoid FE/BE mismatch in mixed deployment.
+pub fn get_pid_by_service(service_name: &str) -> Option<u32> {
+    let config = load_config().ok()?;
+
+    if let Some(pid) =
+        select_pid_for_service(&config, service_name).filter(|pid| is_pid_running(*pid))
+    {
+        return Some(pid);
+    }
+
+    match service_name {
+        "FE" => process_detector::get_pid_by_env(Environment::FE).ok(),
+        "BE" => process_detector::get_pid_by_env(Environment::BE).ok(),
+        _ => config.get_valid_pid(),
+    }
+}
+
 /// Check if configuration needs to be updated based on detected process
 fn needs_config_update(
     config: &DorisConfig,
@@ -375,4 +420,72 @@ fn update_config_from_process(
     config.mysql = mysql_config;
 
     Ok(config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn select_pid_for_service_cases() {
+        struct Case {
+            name: &'static str,
+            config: DorisConfig,
+            service: &'static str,
+            expected: Option<u32>,
+        }
+
+        let cases = vec![
+            Case {
+                name: "prefer_fe_pid_in_mixed_environment",
+                config: DorisConfig {
+                    environment: Environment::Mixed,
+                    process_pid: Some(1000),
+                    fe_process_pid: Some(2000),
+                    ..DorisConfig::default()
+                },
+                service: "FE",
+                expected: Some(2000),
+            },
+            Case {
+                name: "use_primary_pid_in_fe_environment",
+                config: DorisConfig {
+                    environment: Environment::FE,
+                    process_pid: Some(3000),
+                    ..DorisConfig::default()
+                },
+                service: "FE",
+                expected: Some(3000),
+            },
+            Case {
+                name: "use_primary_pid_in_be_environment",
+                config: DorisConfig {
+                    environment: Environment::BE,
+                    process_pid: Some(4000),
+                    ..DorisConfig::default()
+                },
+                service: "BE",
+                expected: Some(4000),
+            },
+            Case {
+                name: "do_not_fallback_to_be_primary_for_fe",
+                config: DorisConfig {
+                    environment: Environment::BE,
+                    process_pid: Some(5000),
+                    ..DorisConfig::default()
+                },
+                service: "FE",
+                expected: None,
+            },
+        ];
+
+        for case in cases {
+            assert_eq!(
+                select_pid_for_service(&case.config, case.service),
+                case.expected,
+                "case failed: {}",
+                case.name
+            );
+        }
+    }
 }

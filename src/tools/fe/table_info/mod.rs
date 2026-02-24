@@ -135,7 +135,7 @@ impl FeTableInfoTool {
             if db.is_empty() {
                 continue;
             }
-            if ["information_schema", "mysql", "__internal_schema"].contains(&db) {
+            if crate::tools::mysql::SYSTEM_DATABASES.contains(&db) {
                 continue;
             }
             out.push(db.to_string());

@@ -160,20 +160,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_encrypt_decrypt_password() {
-        let mgr = CredentialManager::new().unwrap();
-        let password = "test123!@#";
-        let encrypted = mgr.encrypt_password(password).unwrap();
-        let decrypted = mgr.decrypt_password(&encrypted).unwrap();
-        assert_eq!(password, decrypted);
-    }
+    fn encrypt_decrypt_roundtrip_cases() {
+        let key_bytes = [0x5Au8; 32];
+        let mgr = CredentialManager {
+            key: *Key::<Aes256Gcm>::from_slice(&key_bytes),
+        };
 
-    #[test]
-    fn test_encrypt_decrypt_empty_password() {
-        let mgr = CredentialManager::new().unwrap();
-        let password = "";
-        let encrypted = mgr.encrypt_password(password).unwrap();
-        let decrypted = mgr.decrypt_password(&encrypted).unwrap();
-        assert_eq!(password, decrypted);
+        for password in ["test123!@#", ""] {
+            let encrypted = mgr
+                .encrypt_password(password)
+                .expect("encrypt must succeed");
+            let decrypted = mgr
+                .decrypt_password(&encrypted)
+                .expect("decrypt must succeed");
+            assert_eq!(password, decrypted);
+        }
     }
 }

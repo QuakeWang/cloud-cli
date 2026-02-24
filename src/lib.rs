@@ -66,8 +66,11 @@ pub fn run_cli() -> Result<()> {
         match show_main_menu()? {
             MainMenuAction::Fe => {
                 if let Err(e) =
-                    ui::handle_service_loop(&current_config, "FE", app_state.registry.fe_tools())
+                    ui::handle_service_loop(&mut current_config, "FE", &app_state.registry)
                 {
+                    if matches!(e, crate::error::CliError::UserExit) {
+                        break;
+                    }
                     print_error(&format!("FE service error: {e}"));
                     if !ask_continue("Would you like to return to the main menu?")? {
                         break;
@@ -76,8 +79,11 @@ pub fn run_cli() -> Result<()> {
             }
             MainMenuAction::Be => {
                 if let Err(e) =
-                    ui::handle_service_loop(&current_config, "BE", app_state.registry.be_tools())
+                    ui::handle_service_loop(&mut current_config, "BE", &app_state.registry)
                 {
+                    if matches!(e, crate::error::CliError::UserExit) {
+                        break;
+                    }
                     print_error(&format!("BE service error: {e}"));
                     if !ask_continue("Would you like to return to the main menu?")? {
                         break;

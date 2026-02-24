@@ -2,7 +2,8 @@ use chrono::Duration;
 use std::collections::BTreeMap;
 
 use super::job_manager::RoutineLoadJobManager;
-use super::log_parser::{FeLogParser, LogCommitEntry, scan_file};
+use super::log_parser::{FeLogParser, scan_file};
+use super::models::LogCommitEntry;
 use crate::config::Config;
 use crate::error::{CliError, Result};
 use crate::tools::common::fs_utils;
