@@ -278,6 +278,12 @@ impl MySQLTool {
         }
 
         let config = crate::config_loader::load_config()?;
+        if let Some(selected_fe_host) =
+            crate::tools::common::host_selection::get_selected_host(false)
+        {
+            return Ok((selected_fe_host, config.query_port.unwrap_or(9030)));
+        }
+
         if let Some(port) = config.query_port {
             return Ok(("127.0.0.1".to_string(), port));
         }

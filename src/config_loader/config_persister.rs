@@ -9,6 +9,15 @@ trait ConfigConverter<T> {
     fn convert_to(&self) -> T;
 }
 
+fn parse_environment(env: &str) -> Environment {
+    match env {
+        "FE" => Environment::FE,
+        "BE" => Environment::BE,
+        "FE + BE" => Environment::Mixed,
+        _ => Environment::Unknown,
+    }
+}
+
 /// Serializable configuration structure with organized FE and BE sections
 #[derive(Serialize, Deserialize)]
 struct OrganizedConfig {
@@ -203,63 +212,9 @@ impl ConfigConverter<ProcessInfo> for DorisConfig {
     }
 }
 
-impl ConfigConverter<DorisConfig> for PersistentConfig {
-    fn convert_to(&self) -> DorisConfig {
-        let environment = match self.metadata.environment.as_str() {
-            "FE" => Environment::FE,
-            "BE" => Environment::BE,
-            "FE + BE" => Environment::Mixed,
-            _ => Environment::Unknown,
-        };
-
-        DorisConfig {
-            environment,
-            install_dir: PathBuf::from(&self.paths.install_dir),
-            conf_dir: PathBuf::from(&self.paths.conf_dir),
-            log_dir: PathBuf::from(&self.paths.log_dir),
-            jdk_path: PathBuf::from(&self.paths.jdk_path),
-            output_dir: PathBuf::from(&self.paths.output_dir),
-            timeout_seconds: self.settings.timeout_seconds,
-            no_progress_animation: self.settings.no_progress_animation,
-            process_pid: self.process.pid,
-            process_command: self.process.command.clone(),
-            last_detected: self
-                .process
-                .last_detected
-                .as_ref()
-                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                .map(|dt| dt.with_timezone(&chrono::Utc)),
-            be_process_pid: self.process.be_process_pid,
-            be_process_command: self.process.be_process_command.clone(),
-            be_install_dir: self.process.be_install_dir.as_ref().map(PathBuf::from),
-            fe_process_pid: self.process.fe_process_pid,
-            fe_process_command: self.process.fe_process_command.clone(),
-            fe_install_dir: self.process.fe_install_dir.as_ref().map(PathBuf::from),
-            be_port: self.ports.be_port,
-            brpc_port: self.ports.brpc_port,
-            heartbeat_service_port: self.ports.heartbeat_service_port,
-            webserver_port: self.ports.webserver_port,
-            http_port: self.ports.http_port,
-            rpc_port: self.ports.rpc_port,
-            query_port: self.ports.query_port,
-            edit_log_port: self.ports.edit_log_port,
-            cloud_http_port: self.ports.cloud_http_port,
-            meta_dir: self.paths.meta_dir.as_ref().map(PathBuf::from),
-            priority_networks: self.network.priority_networks.clone(),
-            meta_service_endpoint: self.network.meta_service_endpoint.clone(),
-            mysql: self.mysql.clone(),
-        }
-    }
-}
-
 /// Convert persistent format to internal config
 fn from_persistent_config(persistent: PersistentConfig) -> DorisConfig {
-    let environment = match persistent.metadata.environment.as_str() {
-        "FE" => Environment::FE,
-        "BE" => Environment::BE,
-        "FE + BE" => Environment::Mixed,
-        _ => Environment::Unknown,
-    };
+    let environment = parse_environment(persistent.metadata.environment.as_str());
 
     DorisConfig {
         environment,
@@ -403,7 +358,7 @@ fn migrate_legacy_config(content: &str, config_path: &Path) -> Option<DorisConfi
                 }
             }
 
-            Some(new_config.convert_to())
+            Some(from_persistent_config(new_config))
         }
         Err(_) => None,
     }
@@ -479,12 +434,7 @@ fn parse_legacy_config_with_mysql(content: &str) -> Option<DorisConfig> {
 
     match toml::from_str::<LegacyConfigWithMySQL>(content) {
         Ok(legacy) => {
-            let environment = match legacy.metadata.environment.as_str() {
-                "FE" => Environment::FE,
-                "BE" => Environment::BE,
-                "FE + BE" => Environment::Mixed,
-                _ => Environment::Unknown,
-            };
+            let environment = parse_environment(legacy.metadata.environment.as_str());
 
             Some(DorisConfig {
                 environment,
@@ -530,12 +480,7 @@ fn parse_legacy_config_with_mysql(content: &str) -> Option<DorisConfig> {
 
 /// Convert organized config to internal config
 fn from_organized_config(organized: &OrganizedConfig) -> DorisConfig {
-    let environment = match organized.metadata.environment.as_str() {
-        "FE" => Environment::FE,
-        "BE" => Environment::BE,
-        "FE + BE" => Environment::Mixed,
-        _ => Environment::Unknown,
-    };
+    let environment = parse_environment(organized.metadata.environment.as_str());
 
     let mut config = DorisConfig {
         environment,

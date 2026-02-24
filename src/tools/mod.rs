@@ -90,4 +90,13 @@ impl ToolRegistry {
     pub fn be_tools(&self) -> &[Box<dyn Tool>] {
         &self.be_tools
     }
+
+    pub fn get_tool(&self, service: &str, name: &str) -> Option<&dyn Tool> {
+        let tools = match service {
+            "FE" => &self.fe_tools,
+            "BE" => &self.be_tools,
+            _ => return None,
+        };
+        tools.iter().find(|t| t.name() == name).map(|t| &**t)
+    }
 }

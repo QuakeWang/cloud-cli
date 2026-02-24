@@ -10,6 +10,7 @@ pub enum CliError {
     InvalidInput(String),
     ConfigError(String),
     GracefulExit,
+    UserExit,
     MySQLAccessDenied(String),
 }
 
@@ -23,6 +24,7 @@ impl fmt::Display for CliError {
             CliError::InvalidInput(msg) => write!(f, "Invalid input: {msg}"),
             CliError::ConfigError(msg) => write!(f, "Configuration error: {msg}"),
             CliError::GracefulExit => write!(f, "Graceful exit"),
+            CliError::UserExit => write!(f, "User requested exit"),
             CliError::MySQLAccessDenied(msg) => write!(f, "MySQL access denied: {msg}"),
         }
     }

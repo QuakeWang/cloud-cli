@@ -1,18 +1,10 @@
+use super::models::LogCommitEntry;
 use crate::error::{CliError, Result};
 use chrono::NaiveDateTime;
 use regex::Regex;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-
-#[derive(Debug, Clone, Default)]
-pub struct LogCommitEntry {
-    pub timestamp: NaiveDateTime,
-    pub loaded_rows: Option<u64>,
-    pub received_bytes: Option<u64>,
-    pub task_execution_ms: Option<u64>,
-    pub transaction_id: Option<String>,
-}
 
 pub struct FeLogParser {
     re_ts: Regex,

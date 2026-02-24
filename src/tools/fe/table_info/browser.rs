@@ -6,7 +6,13 @@ use super::{FeTableInfoTool, TableIdentity};
 use std::fs;
 use std::path::PathBuf;
 
-pub fn run_interactive(config: &crate::config::Config) -> Result<()> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrowserAction {
+    BackToFeMenu,
+    ExitApp,
+}
+
+pub fn run_interactive(config: &crate::config::Config) -> Result<BrowserAction> {
     loop {
         match select_database_or_bulk(config)? {
             DatabaseSelection::Single(db) => match select_table_or_bulk(config, &db)? {
@@ -45,11 +51,8 @@ pub fn run_interactive(config: &crate::config::Config) -> Result<()> {
 
         match prompt_next_action()? {
             NextAction::AnalyzeAnother => continue,
-            NextAction::BackToFeMenu => return Ok(()),
-            NextAction::ExitApp => {
-                crate::ui::print_goodbye();
-                std::process::exit(0);
-            }
+            NextAction::BackToFeMenu => return Ok(BrowserAction::BackToFeMenu),
+            NextAction::ExitApp => return Ok(BrowserAction::ExitApp),
         }
     }
 }
